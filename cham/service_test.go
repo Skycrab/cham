@@ -12,7 +12,6 @@ func helloDispatch(session int32, source Address, args ...interface{}) []interfa
 	fmt.Println(session, source, args)
 	cmd := args[0].(string)
 	time.Sleep(time.Second * 4)
-	fmt.Println("end")
 	if cmd == "Hello" {
 		return Ret("World")
 	} else if cmd == "Notify" {
@@ -33,8 +32,8 @@ func WorldDispatch(session int32, source Address, args ...interface{}) []interfa
 }
 
 func TestService(t *testing.T) {
-	hello := NewService("Hello", 100, helloDispatch)
-	world := NewService("World", 100, WorldDispatch)
+	hello := NewService("Hello", helloDispatch)
+	world := NewService("World", WorldDispatch)
 	for i := 0; i < 5; i++ {
 		// world.Call("Hello", "Hello")
 		world.Send(hello, "send")

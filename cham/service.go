@@ -2,12 +2,8 @@ package cham
 
 import (
 	// "fmt"
-	// "sync"
+	"sync"
 	"sync/atomic"
-)
-
-const (
-	DEFAULT_QUEUE_SIZE = 1024
 )
 
 type handler func(session int32, source Address, args ...interface{}) []interface{}
@@ -22,9 +18,11 @@ type Service struct {
 	session  int32
 	Name     string
 	Addr     Address
-	queue    chan *Msg
+	queue    *Queue
 	closed   bool
 	quit     chan struct{}
+	rlock    *sync.Mutex
+	rcond    *sync.Cond
 	pending  map[int32]chan *Msg
 	dispatch handler
 }
@@ -33,17 +31,16 @@ func Ret(args ...interface{}) []interface{} {
 	return args
 }
 
-func NewService(name string, size uint32, dispatch handler) *Service {
+func NewService(name string, dispatch handler) *Service {
 	service := new(Service)
 	service.session = 0
 	service.Name = name
 	service.Addr = GenAddr()
-	if size == 0 {
-		size = DEFAULT_QUEUE_SIZE
-	}
-	service.queue = make(chan *Msg, size)
+	service.queue = NewQueue()
 	service.closed = false
 	service.quit = make(chan struct{})
+	service.rlock = new(sync.Mutex)
+	service.rcond = sync.NewCond(service.rlock)
 	service.pending = make(map[int32]chan *Msg)
 	service.dispatch = dispatch
 
@@ -55,10 +52,17 @@ func NewService(name string, size uint32, dispatch handler) *Service {
 func (s *Service) Start() {
 	for {
 		select {
-		case msg := <-s.queue:
-			go s.dispatchMsg(msg)
 		case <-s.quit:
 			return
+		default:
+			msg := s.queue.Pop()
+			if msg == nil {
+				s.rlock.Lock()
+				s.rcond.Wait()
+				s.rlock.Unlock()
+			} else {
+				go s.dispatchMsg(msg)
+			}
 		}
 	}
 }
@@ -112,18 +116,20 @@ func (s *Service) Send(query interface{}, args ...interface{}) chan *Msg {
 }
 
 func (s *Service) Push(msg *Msg) {
-	s.queue <- msg
+	s.queue.Push(msg)
+	s.rcond.Signal()
 }
 
 func (s *Service) Stop() bool {
 	if !s.closed {
 		s.closed = true
 		close(s.quit)
+		s.rcond.Signal()
 		return true
 	}
 	return false
 }
 
 func (s *Service) Status() int {
-	return len(s.queue)
+	return s.queue.Length()
 }
