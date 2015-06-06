@@ -2,6 +2,7 @@ package cham
 
 import (
 	// "fmt"
+	// "sync"
 	"sync/atomic"
 )
 
@@ -15,7 +16,6 @@ type Msg struct {
 	source  Address
 	session int32
 	args    []interface{}
-	done    chan *Msg
 }
 
 type Service struct {
@@ -25,6 +25,7 @@ type Service struct {
 	queue    chan *Msg
 	closed   bool
 	quit     chan struct{}
+	pending  map[int32]chan *Msg
 	dispatch handler
 }
 
@@ -43,6 +44,7 @@ func NewService(name string, size uint32, dispatch handler) *Service {
 	service.queue = make(chan *Msg, size)
 	service.closed = false
 	service.quit = make(chan struct{})
+	service.pending = make(map[int32]chan *Msg)
 	service.dispatch = dispatch
 
 	Register(service)
@@ -63,31 +65,50 @@ func (s *Service) Start() {
 
 func (s *Service) dispatchMsg(msg *Msg) {
 	if msg.session == 0 {
-		s.dispatch(msg.session, msg.source, msg.args)
+		s.dispatch(msg.session, msg.source, msg.args...)
 	} else if msg.session > 0 {
 		result := s.dispatch(msg.session, msg.source, msg.args...)
-		resp := &Msg{s.Addr, -msg.session, result, msg.done}
+		resp := &Msg{s.Addr, -msg.session, result}
 		dest := msg.source.GetService()
 		dest.Push(resp)
 	} else {
-		msg.done <- msg
+		session := -msg.session
+		done := s.pending[session]
+		delete(s.pending, session)
+		done <- msg
 	}
 }
 
-func (s *Service) Call(query interface{}, args ...interface{}) []interface{} {
-	session := atomic.AddInt32(&s.session, 1)
-	msg := &Msg{s.Addr, session, args, make(chan *Msg, 1)}
+func (s *Service) send(query interface{}, session int32, args ...interface{}) chan *Msg {
+	if session != 0 {
+		session = atomic.AddInt32(&s.session, 1)
+	}
+	msg := &Msg{s.Addr, session, args}
 	dest := GetService(query)
 	dest.Push(msg)
-	m := <-msg.done
+	var done chan *Msg
+	if session != 0 { // need reply
+		done = make(chan *Msg, 1)
+		s.pending[session] = done
+	}
+
+	return done
+}
+
+// wait response
+func (s *Service) Call(query interface{}, args ...interface{}) []interface{} {
+	m := <-s.send(query, 1, args...)
 	return m.args
 }
 
 // no reply
-func (s *Service) Notify(addr Address, args ...interface{}) {
-	// msg := &Msg{s.Addr, 0, args}
-	// dest := addr.GetService()
-	// dest.Push(msg)
+func (s *Service) Notify(query interface{}, args ...interface{}) {
+	s.send(query, 0, args...)
+}
+
+// no wait response
+func (s *Service) Send(query interface{}, args ...interface{}) chan *Msg {
+	return s.send(query, 1, args...)
 }
 
 func (s *Service) Push(msg *Msg) {

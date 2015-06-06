@@ -39,8 +39,6 @@ func (m *Master) register(s *Service) bool {
 }
 
 func (m *Master) getService(query interface{}) *Service {
-	m.RLock()
-	defer m.RUnlock()
 	switch v := query.(type) {
 	case Address:
 		return m.services[v]
