@@ -13,5 +13,5 @@ func GenAddr() Address {
 }
 
 func (addr Address) GetService() *Service {
-	return GetService(addr)
+	return master.GetService(addr)
 }

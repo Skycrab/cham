@@ -24,7 +24,7 @@ func NewMaster() *Master {
 	return master
 }
 
-func (m *Master) register(s *Service) bool {
+func (m *Master) Register(s *Service) bool {
 	m.Lock()
 	defer m.Unlock()
 	m.services[s.Addr] = s
@@ -38,7 +38,27 @@ func (m *Master) register(s *Service) bool {
 	}
 }
 
-func (m *Master) getService(query interface{}) *Service {
+func (m *Master) Unregister(s *Service) bool {
+	m.Lock()
+	defer m.Unlock()
+	delete(m.services, s.Addr)
+	nss := m.nameservices[s.Name]
+	var idx int = -1
+	for i, ns := range nss {
+		if ns.Name == s.Name {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return false
+	} else {
+		m.nameservices[s.Name] = append(nss[:idx], nss[idx+1:]...)
+		return true
+	}
+}
+
+func (m *Master) GetService(query interface{}) *Service {
 	switch v := query.(type) {
 	case Address:
 		return m.services[v]
@@ -53,15 +73,17 @@ func (m *Master) getService(query interface{}) *Service {
 	default:
 		panic("not reachable")
 	}
-
 }
 
-func Register(s *Service) bool {
-	return master.register(s)
-}
-
-func GetService(query interface{}) *Service {
-	return master.getService(query)
+func (m *Master) UniqueService(name string) *Service {
+	ns := m.nameservices[name]
+	if len(ns) > 1 {
+		panic("unique service duplicate")
+	} else if len(ns) == 1 {
+		return ns[0]
+	} else {
+		return nil
+	}
 }
 
 func init() {

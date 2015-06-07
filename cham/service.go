@@ -44,9 +44,18 @@ func NewService(name string, dispatch handler) *Service {
 	service.pending = make(map[int32]chan *Msg)
 	service.dispatch = dispatch
 
-	Register(service)
+	master.Register(service)
 	go service.Start()
 	return service
+}
+
+//create or return already name
+func UniqueService(name string, dispatch handler) *Service {
+	s := master.UniqueService(name)
+	if s == nil {
+		s = NewService(name, dispatch)
+	}
+	return s
 }
 
 func (s *Service) Start() {
@@ -88,7 +97,7 @@ func (s *Service) send(query interface{}, session int32, args ...interface{}) ch
 		session = atomic.AddInt32(&s.session, 1)
 	}
 	msg := &Msg{s.Addr, session, args}
-	dest := GetService(query)
+	dest := master.GetService(query)
 	dest.Push(msg)
 	var done chan *Msg
 	if session != 0 { // need reply
@@ -125,6 +134,7 @@ func (s *Service) Stop() bool {
 		s.closed = true
 		close(s.quit)
 		s.rcond.Signal()
+		master.Unregister(s)
 		return true
 	}
 	return false
