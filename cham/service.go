@@ -1,37 +1,42 @@
 package cham
 
 import (
-	// "fmt"
+	"fmt"
 	"sync"
 	"sync/atomic"
 )
 
-type handler func(session int32, source Address, args ...interface{}) []interface{}
+var (
+	serviceMutex *sync.Mutex
+)
+
+type Handler func(session int32, source Address, ptype uint8, args ...interface{}) []interface{}
 
 type Msg struct {
 	source  Address
 	session int32
+	ptype   uint8
 	args    []interface{}
 }
 
 type Service struct {
-	session  int32
-	Name     string
-	Addr     Address
-	queue    *Queue
-	closed   bool
-	quit     chan struct{}
-	rlock    *sync.Mutex
-	rcond    *sync.Cond
-	pending  map[int32]chan *Msg
-	dispatch handler
+	session   int32
+	Name      string
+	Addr      Address
+	queue     *Queue
+	closed    bool
+	quit      chan struct{}
+	rlock     *sync.Mutex
+	rcond     *sync.Cond
+	pending   map[int32]chan *Msg
+	dispatchs map[uint8]Handler
 }
 
 func Ret(args ...interface{}) []interface{} {
 	return args
 }
 
-func NewService(name string, dispatch handler) *Service {
+func NewService(name string, dispatch Handler) *Service {
 	service := new(Service)
 	service.session = 0
 	service.Name = name
@@ -42,7 +47,7 @@ func NewService(name string, dispatch handler) *Service {
 	service.rlock = new(sync.Mutex)
 	service.rcond = sync.NewCond(service.rlock)
 	service.pending = make(map[int32]chan *Msg)
-	service.dispatch = dispatch
+	service.dispatchs = map[uint8]Handler{PTYPE_GO: dispatch}
 
 	master.Register(service)
 	go service.Start()
@@ -50,7 +55,10 @@ func NewService(name string, dispatch handler) *Service {
 }
 
 //create or return already name
-func UniqueService(name string, dispatch handler) *Service {
+func UniqueService(name string, dispatch Handler) *Service {
+	serviceMutex.Lock()
+	defer serviceMutex.Unlock()
+
 	s := master.UniqueService(name)
 	if s == nil {
 		s = NewService(name, dispatch)
@@ -78,10 +86,10 @@ func (s *Service) Start() {
 
 func (s *Service) dispatchMsg(msg *Msg) {
 	if msg.session == 0 {
-		s.dispatch(msg.session, msg.source, msg.args...)
+		s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args...)
 	} else if msg.session > 0 {
-		result := s.dispatch(msg.session, msg.source, msg.args...)
-		resp := &Msg{s.Addr, -msg.session, result}
+		result := s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args...)
+		resp := &Msg{s.Addr, -msg.session, msg.ptype, result}
 		dest := msg.source.GetService()
 		dest.Push(resp)
 	} else {
@@ -92,11 +100,18 @@ func (s *Service) dispatchMsg(msg *Msg) {
 	}
 }
 
-func (s *Service) send(query interface{}, session int32, args ...interface{}) chan *Msg {
+func (s *Service) RegisterProtocol(ptype uint8, dispatch Handler) {
+	if _, ok := s.dispatchs[ptype]; ok {
+		panic(s.String() + "duplicate register protocol")
+	}
+	s.dispatchs[ptype] = dispatch
+}
+
+func (s *Service) send(query interface{}, ptype uint8, session int32, args ...interface{}) chan *Msg {
 	if session != 0 {
 		session = atomic.AddInt32(&s.session, 1)
 	}
-	msg := &Msg{s.Addr, session, args}
+	msg := &Msg{s.Addr, session, ptype, args}
 	dest := master.GetService(query)
 	dest.Push(msg)
 	var done chan *Msg
@@ -108,20 +123,20 @@ func (s *Service) send(query interface{}, session int32, args ...interface{}) ch
 	return done
 }
 
-// wait response
-func (s *Service) Call(query interface{}, args ...interface{}) []interface{} {
-	m := <-s.send(query, 1, args...)
+// wait response, query can service name/addr/service
+func (s *Service) Call(query interface{}, ptype uint8, args ...interface{}) []interface{} {
+	m := <-s.send(query, ptype, 1, args...)
 	return m.args
 }
 
 // no reply
-func (s *Service) Notify(query interface{}, args ...interface{}) {
-	s.send(query, 0, args...)
+func (s *Service) Notify(query interface{}, ptype uint8, args ...interface{}) {
+	s.send(query, ptype, 0, args...)
 }
 
 // no wait response
-func (s *Service) Send(query interface{}, args ...interface{}) chan *Msg {
-	return s.send(query, 1, args...)
+func (s *Service) Send(query interface{}, ptype uint8, args ...interface{}) chan *Msg {
+	return s.send(query, ptype, 1, args...)
 }
 
 func (s *Service) Push(msg *Msg) {
@@ -140,6 +155,19 @@ func (s *Service) Stop() bool {
 	return false
 }
 
+func (s *Service) String() string {
+	return fmt.Sprintf("SERVICE[addr->%d, name->%s]:", s.Addr, s.Name)
+}
+
 func (s *Service) Status() int {
 	return s.queue.Length()
+}
+
+func Redirect(source Address, msg *Msg) {
+	dest := source.GetService()
+	dest.Push(msg)
+}
+
+func init() {
+	serviceMutex = new(sync.Mutex)
 }

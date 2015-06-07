@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func helloDispatch(session int32, source Address, args ...interface{}) []interface{} {
+func helloDispatch(session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
 	fmt.Println(session, source, args)
 	cmd := args[0].(string)
 	time.Sleep(time.Second * 4)
@@ -27,7 +27,7 @@ func init() {
 	// runtime.GOMAXPROCS(4)
 }
 
-func WorldDispatch(session int32, source Address, args ...interface{}) []interface{} {
+func WorldDispatch(session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
 	return Ret("999")
 }
 
@@ -36,7 +36,10 @@ func TestService(t *testing.T) {
 	world := NewService("World", WorldDispatch)
 	for i := 0; i < 5; i++ {
 		// world.Call("Hello", "Hello")
-		world.Send(hello, "send")
+		go func() {
+			fmt.Println(world.Call(hello, PTYPE_GO, "Hello"))
+		}()
+		// world.Send(hello, PTYPE_GO, "send")
 	}
 	time.Sleep(time.Second * 100)
 }

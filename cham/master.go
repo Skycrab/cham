@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DEFAULT_SERVICE_SIZE = 512
+	DEFAULT_SERVICE_SIZE = 64
 )
 
 var master *Master
