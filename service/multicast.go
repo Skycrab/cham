@@ -2,7 +2,7 @@ package service
 
 import (
 	"cham/cham"
-	"sync"
+	// "fmt"
 	"sync/atomic"
 )
 
@@ -20,28 +20,28 @@ const (
 )
 
 var (
-	mul *multicast
+	mul *Multicast
 )
 
-type multicast struct {
+type Multicast struct {
 	channel uint32
 	groups  map[uint32]map[cham.Address]cham.NULL // channel->set(address)
 }
 
-func (m *multicast) new(addr cham.Address) uint32 {
-	ch := atomic.AddInt32(&m.channel, 1)
+func (m *Multicast) new(addr cham.Address) uint32 {
+	ch := atomic.AddUint32(&m.channel, 1)
 	m.groups[ch] = make(map[cham.Address]cham.NULL, DEFAULT_CHANNEL_SIZE)
 	return ch
 }
 
-func (m *multicast) sub(addr cham.Address, ch uint32) {
+func (m *Multicast) sub(addr cham.Address, ch uint32) {
 	if _, ok := m.groups[ch]; !ok {
 		panic("should new a channel before sub a channel")
 	}
 	m.groups[ch][addr] = cham.NULLVALUE
 }
 
-func (m *multicast) unsub(addr cham.Address, ch uint32) {
+func (m *Multicast) unsub(addr cham.Address, ch uint32) {
 	if _, ok := m.groups[ch]; !ok {
 		panic("should new a channel before unsub a channel")
 	}
@@ -49,23 +49,24 @@ func (m *multicast) unsub(addr cham.Address, ch uint32) {
 }
 
 // multi invode harmless
-func (m *multicast) del(ch uint32) {
+func (m *Multicast) del(ch uint32) {
 	delete(m.groups, ch)
 }
 
-func (m *multicast) pub(addr cham.Address, ch uint32, args ...interface{}) {
+func (m *Multicast) pub(addr cham.Address, ch uint32, args ...interface{}) {
 	peers := m.groups[ch]
 	if len(peers) > 0 {
 		data := make([]interface{}, 0, len(args)+1)
-		data = append(data, ch, args...)
-		msg := &cham.Msg{addr, 0, PTYPE_MULTICAST, data}
+		data = append(data, ch)
+		data = append(data, args...)
+		msg := cham.NewMsg(addr, 0, cham.PTYPE_MULTICAST, data) // args[0] is channel id
 		for peer := range peers {
 			cham.Redirect(peer, msg)
 		}
 	}
 }
 
-func MulticastDispatch(session int32, source Address, ptype uint8, args ...interface{}) []interface{} {
+func MulticastDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 	cmd := args[0].(uint8)
 	channel := args[1].(uint32)
 	addr := args[2].(cham.Address)
@@ -74,22 +75,22 @@ func MulticastDispatch(session int32, source Address, ptype uint8, args ...inter
 
 	switch cmd {
 	case MULTICAST_NEW:
-		result = mul.new(addr)
+		result = cham.Ret(mul.new(addr))
 	case MULTICAST_SUB:
 		mul.sub(addr, channel)
 	case MULTICAST_PUB:
-		mul.pub(addr, channel, args[1:])
+		mul.pub(addr, channel, args[3:]...)
 	case MULTICAST_UNSUB:
 		mul.unsub(addr, channel)
 	case MULTICAST_DEL:
 		mul.del(channel)
 	}
 
-	return cham.Ret(result)
+	return result
 }
 
 func init() {
-	mul = new(multicast)
+	mul = new(Multicast)
 	mul.channel = 0
 	mul.groups = make(map[uint32]map[cham.Address]cham.NULL, DEFAULT_GROUP_SIZE)
 }

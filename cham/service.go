@@ -36,6 +36,10 @@ func Ret(args ...interface{}) []interface{} {
 	return args
 }
 
+func NewMsg(source Address, session int32, ptype uint8, args []interface{}) *Msg {
+	return &Msg{source, session, ptype, args}
+}
+
 func NewService(name string, dispatch Handler) *Service {
 	service := new(Service)
 	service.session = 0
