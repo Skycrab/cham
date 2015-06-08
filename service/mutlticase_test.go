@@ -37,5 +37,9 @@ func TestMulticase(t *testing.T) {
 	chat1Channel.Subscribe()
 	chat2Channel.Subscribe()
 	channel.Publish("hello world")
+	chat1Channel.Publish("i am chat1")
+	chat2Channel.Unsubscribe()
+	channel.Publish("last")
+	channel.Delete()
 
 }
