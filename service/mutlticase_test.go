@@ -6,28 +6,28 @@ import (
 	"testing"
 )
 
-func MainDispatch(session int32, source cham.Address, ptypt uint8, args ...interface{}) []interface{} {
+func MainDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 	fmt.Println(args)
 	return cham.NORET
 }
 
-func ChatDispatch(session int32, source cham.Address, ptypt uint8, args ...interface{}) []interface{} {
+func ChatDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 	fmt.Println(args)
 	return cham.NORET
 }
 
 // args[0] is channel id
-func Chat2Dispatch(session int32, source cham.Address, ptypt uint8, args ...interface{}) []interface{} {
+func Chat2Dispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 	fmt.Println(args)
 	return cham.NORET
 }
 
-func ChannelDispatch(session int32, source cham.Address, ptypt uint8, args ...interface{}) []interface{} {
+func ChannelDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 	fmt.Println(args)
 	return cham.NORET
 }
 
-func TestMulticase(t *testing.T) {
+func TestMulticast(t *testing.T) {
 	main := cham.NewService("Leader", MainDispatch)
 	chat1 := cham.NewService("chat1", ChatDispatch)
 	chat2 := cham.NewService("chat2", Chat2Dispatch)
@@ -39,6 +39,7 @@ func TestMulticase(t *testing.T) {
 	channel.Publish("hello world")
 	chat1Channel.Publish("i am chat1")
 	chat2Channel.Unsubscribe()
+	chat2.Stop() // test stop services
 	channel.Publish("last")
 	channel.Delete()
 
