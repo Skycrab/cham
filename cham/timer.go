@@ -1,4 +1,4 @@
-package timer
+package cham
 
 import (
 	"container/list"
@@ -36,7 +36,7 @@ func (n *Node) String() string {
 	return fmt.Sprintf("Node:expire,%d", n.expire)
 }
 
-func New(d time.Duration) *Timer {
+func NewWheelTimer(d time.Duration) *Timer {
 	t := new(Timer)
 	t.time = 0
 	t.tick = d

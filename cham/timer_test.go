@@ -1,4 +1,4 @@
-package timer
+package cham
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ func now() {
 }
 
 func TestTimer(t *testing.T) {
-	timer := New(time.Millisecond * 10)
+	timer := NewWheelTimer(time.Millisecond * 10)
 	tt = timer
 	fmt.Println(timer)
 	var i int32
