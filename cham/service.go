@@ -16,7 +16,7 @@ type Msg struct {
 	source  Address
 	session int32
 	ptype   uint8
-	args    []interface{}
+	args    interface{}
 }
 
 type Service struct {
@@ -36,7 +36,7 @@ func Ret(args ...interface{}) []interface{} {
 	return args
 }
 
-func NewMsg(source Address, session int32, ptype uint8, args []interface{}) *Msg {
+func NewMsg(source Address, session int32, ptype uint8, args interface{}) *Msg {
 	return &Msg{source, session, ptype, args}
 }
 
@@ -90,9 +90,9 @@ func (s *Service) Start() {
 
 func (s *Service) dispatchMsg(msg *Msg) {
 	if msg.session == 0 {
-		s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args...)
+		s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
 	} else if msg.session > 0 {
-		result := s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args...)
+		result := s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
 		resp := &Msg{s.Addr, -msg.session, msg.ptype, result}
 		dest := msg.source.GetService()
 		dest.Push(resp)
@@ -130,7 +130,7 @@ func (s *Service) send(query interface{}, ptype uint8, session int32, args ...in
 // wait response, query can service name/addr/service
 func (s *Service) Call(query interface{}, ptype uint8, args ...interface{}) []interface{} {
 	m := <-s.send(query, ptype, 1, args...)
-	return m.args
+	return m.args.([]interface{})
 }
 
 // no reply
