@@ -6,23 +6,27 @@ import (
 	"testing"
 )
 
-func MainDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+func MainDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+	fmt.Println(service)
 	fmt.Println(args)
 	return cham.NORET
 }
 
-func ChatDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+func ChatDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+	fmt.Println(service)
 	fmt.Println(args)
 	return cham.NORET
 }
 
 // args[0] is channel id
-func Chat2Dispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+func Chat2Dispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+	fmt.Println(service)
 	fmt.Println(args)
 	return cham.NORET
 }
 
-func ChannelDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+func ChannelDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+	fmt.Println(service)
 	fmt.Println(args)
 	return cham.NORET
 }

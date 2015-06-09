@@ -10,7 +10,7 @@ var (
 	serviceMutex *sync.Mutex
 )
 
-type Handler func(session int32, source Address, ptype uint8, args ...interface{}) []interface{}
+type Handler func(service *Service, session int32, source Address, ptype uint8, args ...interface{}) []interface{}
 
 type Msg struct {
 	source  Address
@@ -90,9 +90,9 @@ func (s *Service) Start() {
 
 func (s *Service) dispatchMsg(msg *Msg) {
 	if msg.session == 0 {
-		s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
+		s.dispatchs[msg.ptype](s, msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
 	} else if msg.session > 0 {
-		result := s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
+		result := s.dispatchs[msg.ptype](s, msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
 		resp := &Msg{s.Addr, -msg.session, msg.ptype, result}
 		dest := msg.source.GetService()
 		dest.Push(resp)

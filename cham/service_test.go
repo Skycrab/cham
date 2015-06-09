@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func helloDispatch(session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
+func helloDispatch(service *Service, session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
 	fmt.Println(session, source, args)
 	cmd := args[0].(string)
 	time.Sleep(time.Second * 4)
@@ -27,7 +27,7 @@ func init() {
 	// runtime.GOMAXPROCS(4)
 }
 
-func WorldDispatch(session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
+func WorldDispatch(service *Service, session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
 	return Ret("999")
 }
 

@@ -66,7 +66,8 @@ func (m *Multicast) pub(addr cham.Address, ch uint32, args ...interface{}) {
 	}
 }
 
-func MulticastDispatch(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+//service self
+func MulticastDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 	cmd := args[0].(uint8)
 	channel := args[1].(uint32)
 	addr := args[2].(cham.Address)
