@@ -130,7 +130,6 @@ func (g *Gate) close() {
 }
 
 func (g *Gate) start(listen net.Listener) {
-	fmt.Println("start listen")
 	defer listen.Close()
 	var sessionId uint32 = 0
 	for {
