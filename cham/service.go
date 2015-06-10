@@ -2,8 +2,13 @@ package cham
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"sync/atomic"
+)
+
+const (
+	DEFAULT_SERVICE_WORKER int = 4
 )
 
 var (
@@ -40,7 +45,7 @@ func NewMsg(source Address, session int32, ptype uint8, args interface{}) *Msg {
 	return &Msg{source, session, ptype, args}
 }
 
-func NewService(name string, dispatch Handler) *Service {
+func NewService(name string, dispatch Handler, args ...interface{}) *Service {
 	service := new(Service)
 	service.session = 0
 	service.Name = name
@@ -54,7 +59,19 @@ func NewService(name string, dispatch Handler) *Service {
 	service.dispatchs = map[uint8]Handler{PTYPE_GO: dispatch}
 
 	master.Register(service)
-	go service.Start()
+	if len(args) > 0 {
+		n := args[0].(int)
+		if n <= 0 {
+			n = DEFAULT_SERVICE_WORKER
+		}
+		for i := 0; i < n; i++ {
+			go service.Start(i)
+		}
+
+	} else {
+		go service.Start(0)
+	}
+
 	return service
 }
 
@@ -70,7 +87,8 @@ func UniqueService(name string, dispatch Handler) *Service {
 	return s
 }
 
-func (s *Service) Start() {
+func (s *Service) Start(i int) {
+	_ = string(strconv.Itoa(i))
 	for {
 		select {
 		case <-s.quit:
@@ -82,7 +100,7 @@ func (s *Service) Start() {
 				s.rcond.Wait()
 				s.rlock.Unlock()
 			} else {
-				go s.dispatchMsg(msg)
+				s.dispatchMsg(msg)
 			}
 		}
 	}

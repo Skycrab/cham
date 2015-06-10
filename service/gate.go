@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"cham/cham"
 	"encoding/binary"
-	// "fmt"
+	"fmt"
 	"io"
 	"net"
 	"sync"
 	"sync/atomic"
+	// "time"
 )
 
 const (
@@ -69,7 +70,7 @@ func newSession(sessionid uint32, conn net.Conn) *Session {
 func (s *Session) ReadFull(buf []byte) error {
 	if _, err := io.ReadFull(s.brw, buf); err != nil {
 		if e, ok := err.(net.Error); ok && !e.Temporary() {
-			return e
+			return err
 		}
 	}
 	return nil
@@ -142,7 +143,8 @@ func (g *Gate) start(listen net.Listener) {
 				continue
 			}
 			if g.maxclient != 0 && g.clinetnum >= g.maxclient {
-				conn.Close()
+				conn.Close() //server close socket(!net.Error)
+				break
 			}
 			g.clinetnum++
 			sid := atomic.AddUint32(&sessionId, 1)
@@ -172,6 +174,7 @@ func (g *Gate) serve(session *Session) {
 			g.closeSession(session)
 			return
 		}
+		fmt.Println(length, string(data))
 		msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(session.sessionid, data))
 		dest.Push(msg)
 	}

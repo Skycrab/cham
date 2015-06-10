@@ -10,6 +10,7 @@ import (
 
 func helloDispatch(service *Service, session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
 	fmt.Println(session, source, args)
+	time.Sleep(time.Second * 4)
 	cmd := args[0].(string)
 	if cmd == "Hello" {
 		return Ret("World")
@@ -31,7 +32,7 @@ func WorldDispatch(service *Service, session int32, source Address, ptypt uint8,
 }
 
 func TestService(t *testing.T) {
-	hello := NewService("Hello", helloDispatch)
+	hello := NewService("Hello", helloDispatch, 4) // 4 worker of goroutine
 	world := NewService("World", WorldDispatch)
 	for i := 0; i < 5; i++ {
 		// world.Call("Hello", "Hello")

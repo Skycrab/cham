@@ -1,7 +1,7 @@
 package cham
 
 import (
-	// "fmt"
+	"fmt"
 	"sync"
 )
 
@@ -20,6 +20,10 @@ func NewQueue() *Queue {
 	q := new(Queue)
 	q.buf = make([]*Msg, DEFAULT_QUEUE_SIZE)
 	return q
+}
+
+func (q *Queue) String() string {
+	return fmt.Sprintf("QUEUE[%d-%d]", q.head, q.tail)
 }
 
 func (q *Queue) Length() int {
