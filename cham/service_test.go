@@ -11,7 +11,6 @@ import (
 func helloDispatch(service *Service, session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
 	fmt.Println(session, source, args)
 	cmd := args[0].(string)
-	time.Sleep(time.Second * 4)
 	if cmd == "Hello" {
 		return Ret("World")
 	} else if cmd == "Notify" {

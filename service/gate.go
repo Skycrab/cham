@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"cham/cham"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 const (
 	GATE_OPEN uint8 = iota
+	GATE_KICK
 )
 
 var (
@@ -19,11 +21,6 @@ var (
 	bufioWriterPool sync.Pool
 	GATES           map[cham.Address]*Gate
 )
-
-type ClientMsg struct {
-	session uint32
-	data    []byte
-}
 
 type Conf struct {
 	address   string //127.0.0.1:8000
@@ -52,16 +49,15 @@ func (s *Session) Close() {
 }
 
 func (s *Session) Write(data []byte) {
+	head := make([]byte, 2)
+	binary.BigEndian.PutUint16(head, uint16(len(data)))
+	s.brw.Write(head)
 	s.brw.Write(data)
 	s.brw.Flush()
 }
 
 func NewConf(address string, maxclient uint32) *Conf {
 	return &Conf{address, maxclient}
-}
-
-func NewClientMsg(session uint32, data []byte) *ClientMsg {
-	return &ClientMsg{session, data}
 }
 
 func newSession(sessionid uint32, conn net.Conn) *Session {
@@ -134,6 +130,7 @@ func (g *Gate) close() {
 }
 
 func (g *Gate) start(listen net.Listener) {
+	fmt.Println("start listen")
 	defer listen.Close()
 	var sessionId uint32 = 0
 	for {
@@ -176,7 +173,7 @@ func (g *Gate) serve(session *Session) {
 			g.closeSession(session)
 			return
 		}
-		msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, NewClientMsg(session.sessionid, data))
+		msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(session.sessionid, data))
 		dest.Push(msg)
 	}
 }
@@ -201,19 +198,20 @@ func (g *Gate) kick(sessionid uint32) {
 	}
 }
 
-func (g *Gate) Write(msg *ClientMsg) {
+func (g *Gate) Write(sessionid uint32, data []byte) {
 	g.rwmutex.RLock()
-	session, ok := g.sessions[msg.session]
+	session, ok := g.sessions[sessionid]
 	g.rwmutex.RUnlock()
 	if ok {
-		session.Write(msg.data)
+		session.Write(data)
 	}
 }
 
 func GateResponseDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	msg := args[0].(*ClientMsg)
+	sessionid := args[0].(uint32)
+	data := args[1].([]byte)
 	gate := GATES[source]
-	gate.Write(msg)
+	gate.Write(sessionid, data)
 	return cham.NORET
 }
 
@@ -225,7 +223,16 @@ func GateDispatch(service *cham.Service, session int32, source cham.Address, pty
 		GATES[source] = gate
 	}
 
-	return cham.NORET
+	cmd := args[0].(uint8)
+	result := cham.NORET
+	switch cmd {
+	case GATE_OPEN:
+		gate.open(args[1].(*Conf))
+	case GATE_KICK:
+		gate.kick(args[1].(uint32))
+	}
+
+	return result
 }
 
 //may multi gate
