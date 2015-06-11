@@ -12,12 +12,13 @@ type Channel struct {
 	Channel uint32
 }
 
-//Channel base on a service
-func NewChannel(service *cham.Service, channel uint32, dispatch cham.Handler) *Channel {
+//Channel base on a service, args[0] is N worker to dispatch msg
+func NewChannel(service *cham.Service, channel uint32, start cham.Start, args ...interface{}) *Channel {
+	multicast = cham.UniqueService("multicast", MulticastStart, args...)
 	if channel == 0 {
 		channel = service.Call(multicast, cham.PTYPE_GO, MULTICAST_NEW, uint32(0), service.Addr)[0].(uint32)
 	}
-	service.RegisterProtocol(cham.PTYPE_MULTICAST, dispatch)
+	service.RegisterProtocol(cham.PTYPE_MULTICAST, start)
 	c := &Channel{service, channel}
 	return c
 }
@@ -39,8 +40,4 @@ func (c *Channel) Unsubscribe() {
 
 func (c *Channel) Delete() {
 	c.service.Notify(multicast, cham.PTYPE_GO, MULTICAST_DEL, c.Channel, cham.Address(0))
-}
-
-func init() {
-	multicast = cham.UniqueService("multicast", MulticastDispatch)
 }

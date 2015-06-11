@@ -15,7 +15,8 @@ var (
 	serviceMutex *sync.Mutex
 )
 
-type Handler func(service *Service, session int32, source Address, ptype uint8, args ...interface{}) []interface{}
+type Dispatch func(session int32, source Address, ptype uint8, args ...interface{}) []interface{}
+type Start func(service *Service) Dispatch
 
 type Msg struct {
 	source  Address
@@ -34,7 +35,7 @@ type Service struct {
 	rlock     *sync.Mutex
 	rcond     *sync.Cond
 	pending   map[int32]chan *Msg
-	dispatchs map[uint8]Handler
+	dispatchs map[uint8]Dispatch
 }
 
 func Ret(args ...interface{}) []interface{} {
@@ -45,7 +46,8 @@ func NewMsg(source Address, session int32, ptype uint8, args interface{}) *Msg {
 	return &Msg{source, session, ptype, args}
 }
 
-func NewService(name string, dispatch Handler, args ...interface{}) *Service {
+//args[0] is worker number,
+func NewService(name string, start Start, args ...interface{}) *Service {
 	service := new(Service)
 	service.session = 0
 	service.Name = name
@@ -56,7 +58,7 @@ func NewService(name string, dispatch Handler, args ...interface{}) *Service {
 	service.rlock = new(sync.Mutex)
 	service.rcond = sync.NewCond(service.rlock)
 	service.pending = make(map[int32]chan *Msg)
-	service.dispatchs = map[uint8]Handler{PTYPE_GO: dispatch}
+	service.dispatchs = map[uint8]Dispatch{PTYPE_GO: start(service)}
 
 	master.Register(service)
 	if len(args) > 0 {
@@ -76,13 +78,13 @@ func NewService(name string, dispatch Handler, args ...interface{}) *Service {
 }
 
 //create or return already name
-func UniqueService(name string, dispatch Handler) *Service {
+func UniqueService(name string, start Start, args ...interface{}) *Service {
 	serviceMutex.Lock()
 	defer serviceMutex.Unlock()
 
 	s := master.UniqueService(name)
 	if s == nil {
-		s = NewService(name, dispatch)
+		s = NewService(name, start, args...)
 	}
 	return s
 }
@@ -108,9 +110,9 @@ func (s *Service) Start(i int) {
 
 func (s *Service) dispatchMsg(msg *Msg) {
 	if msg.session == 0 {
-		s.dispatchs[msg.ptype](s, msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
+		s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
 	} else if msg.session > 0 {
-		result := s.dispatchs[msg.ptype](s, msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
+		result := s.dispatchs[msg.ptype](msg.session, msg.source, msg.ptype, msg.args.([]interface{})...)
 		resp := &Msg{s.Addr, -msg.session, msg.ptype, result}
 		dest := msg.source.GetService()
 		dest.Push(resp)
@@ -122,11 +124,11 @@ func (s *Service) dispatchMsg(msg *Msg) {
 	}
 }
 
-func (s *Service) RegisterProtocol(ptype uint8, dispatch Handler) {
+func (s *Service) RegisterProtocol(ptype uint8, start Start) {
 	if _, ok := s.dispatchs[ptype]; ok {
 		panic(s.String() + "duplicate register protocol")
 	}
-	s.dispatchs[ptype] = dispatch
+	s.dispatchs[ptype] = start(s)
 }
 
 func (s *Service) send(query interface{}, ptype uint8, session int32, args ...interface{}) chan *Msg {

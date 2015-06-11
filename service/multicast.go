@@ -19,10 +19,6 @@ const (
 	MULTICAST_DEL
 )
 
-var (
-	mul *Multicast
-)
-
 type Multicast struct {
 	channel uint32
 	groups  map[uint32]map[cham.Address]cham.NULL // channel->set(address)
@@ -67,31 +63,30 @@ func (m *Multicast) pub(addr cham.Address, ch uint32, args ...interface{}) {
 }
 
 //service self
-func MulticastDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	cmd := args[0].(uint8)
-	channel := args[1].(uint32)
-	addr := args[2].(cham.Address)
-
-	result := cham.NORET
-
-	switch cmd {
-	case MULTICAST_NEW:
-		result = cham.Ret(mul.new(addr))
-	case MULTICAST_SUB:
-		mul.sub(addr, channel)
-	case MULTICAST_PUB:
-		mul.pub(addr, channel, args[3:]...)
-	case MULTICAST_UNSUB:
-		mul.unsub(addr, channel)
-	case MULTICAST_DEL:
-		mul.del(channel)
-	}
-
-	return result
-}
-
-func init() {
-	mul = new(Multicast)
+func MulticastStart(service *cham.Service) cham.Dispatch {
+	mul := new(Multicast)
 	mul.channel = 0
 	mul.groups = make(map[uint32]map[cham.Address]cham.NULL, DEFAULT_GROUP_SIZE)
+
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		cmd := args[0].(uint8)
+		channel := args[1].(uint32)
+		addr := args[2].(cham.Address)
+
+		result := cham.NORET
+
+		switch cmd {
+		case MULTICAST_NEW:
+			result = cham.Ret(mul.new(addr))
+		case MULTICAST_SUB:
+			mul.sub(addr, channel)
+		case MULTICAST_PUB:
+			mul.pub(addr, channel, args[3:]...)
+		case MULTICAST_UNSUB:
+			mul.unsub(addr, channel)
+		case MULTICAST_DEL:
+			mul.del(channel)
+		}
+		return result
+	}
 }

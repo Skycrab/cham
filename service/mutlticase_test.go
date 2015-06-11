@@ -6,38 +6,39 @@ import (
 	"testing"
 )
 
-func MainDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	fmt.Println(service)
-	fmt.Println(args)
-	return cham.NORET
-}
-
-func ChatDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	fmt.Println(service)
-	fmt.Println(args)
-	return cham.NORET
+func mainStart(service *cham.Service) cham.Dispatch {
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		fmt.Println(service)
+		fmt.Println(args)
+		return cham.NORET
+	}
 }
 
 // args[0] is channel id
-func Chat2Dispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	fmt.Println(service)
-	fmt.Println(args)
-	return cham.NORET
+func chatStart(service *cham.Service) cham.Dispatch {
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		fmt.Println(service)
+		fmt.Println(args)
+		return cham.NORET
+	}
 }
 
-func ChannelDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	fmt.Println(service)
-	fmt.Println(args)
-	return cham.NORET
+func channelStart(service *cham.Service) cham.Dispatch {
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		fmt.Println(args)
+		return cham.NORET
+	}
 }
 
 func TestMulticast(t *testing.T) {
-	main := cham.NewService("Leader", MainDispatch)
-	chat1 := cham.NewService("chat1", ChatDispatch)
-	chat2 := cham.NewService("chat2", Chat2Dispatch)
-	channel := NewChannel(main, 0, ChannelDispatch)
-	chat1Channel := NewChannel(chat1, channel.Channel, ChannelDispatch)
-	chat2Channel := NewChannel(chat2, channel.Channel, ChannelDispatch)
+	main := cham.NewService("Leader", mainStart)
+	chat1 := cham.NewService("chat1", chatStart)
+	chat2 := cham.NewService("chat2", chatStart)
+	//create a channel
+	channel := NewChannel(main, 0, channelStart)
+	//bind a channel
+	chat1Channel := NewChannel(chat1, channel.Channel, channelStart)
+	chat2Channel := NewChannel(chat2, channel.Channel, channelStart)
 	chat1Channel.Subscribe()
 	chat2Channel.Subscribe()
 	channel.Publish("hello world")

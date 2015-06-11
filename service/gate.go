@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"cham/cham"
 	"encoding/binary"
-	"fmt"
+	// "fmt"
 	"io"
 	"net"
 	"sync"
@@ -30,7 +30,7 @@ type Conf struct {
 
 type Gate struct {
 	rwmutex   *sync.RWMutex
-	source    cham.Address
+	Source    cham.Address
 	clinetnum uint32
 	maxclient uint32
 	quit      chan struct{}
@@ -79,7 +79,7 @@ func (s *Session) ReadFull(buf []byte) error {
 func newGate(source cham.Address) *Gate {
 	gate := new(Gate)
 	gate.rwmutex = new(sync.RWMutex)
-	gate.source = source
+	gate.Source = source
 	gate.clinetnum = 0
 	gate.quit = make(chan struct{})
 	gate.sessions = make(map[uint32]*Session)
@@ -160,7 +160,7 @@ func (g *Gate) start(listen net.Listener) {
 // bigendian 2byte length+data
 func (g *Gate) serve(session *Session) {
 	head := make([]byte, 2)
-	dest := g.source.GetService()
+	dest := g.Source.GetService()
 	for {
 		if err := session.ReadFull(head); err != nil {
 			g.closeSession(session)
@@ -174,7 +174,6 @@ func (g *Gate) serve(session *Session) {
 			g.closeSession(session)
 			return
 		}
-		fmt.Println(length, string(data))
 		msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(session.sessionid, data))
 		dest.Push(msg)
 	}
@@ -183,6 +182,7 @@ func (g *Gate) serve(session *Session) {
 func (g *Gate) closeSession(s *Session) {
 	g.rwmutex.Lock()
 	delete(g.sessions, s.sessionid)
+	g.clinetnum--
 	g.rwmutex.Unlock()
 	s.Close()
 }
@@ -193,6 +193,7 @@ func (g *Gate) kick(sessionid uint32) {
 	g.rwmutex.Lock()
 	if session, ok = g.sessions[sessionid]; ok {
 		delete(g.sessions, sessionid)
+		g.clinetnum--
 	}
 	g.rwmutex.Unlock()
 	if ok {
@@ -209,32 +210,34 @@ func (g *Gate) Write(sessionid uint32, data []byte) {
 	}
 }
 
-func GateResponseDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	sessionid := args[0].(uint32)
-	data := args[1].([]byte)
-	gate := GATES[source]
-	gate.Write(sessionid, data)
-	return cham.NORET
+func GateResponseStart(service *cham.Service) cham.Dispatch {
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		sessionid := args[0].(uint32)
+		data := args[1].([]byte)
+		gate := GATES[source]
+		gate.Write(sessionid, data)
+		return cham.NORET
+	}
 }
 
-func GateDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	gate, ok := GATES[source]
-	if !ok {
-		service.RegisterProtocol(cham.PTYPE_RESPONSE, GateResponseDispatch)
-		gate = newGate(source)
-		GATES[source] = gate
-	}
+func GateStart(service *cham.Service) cham.Dispatch {
+	gate := newGate(0)
 
-	cmd := args[0].(uint8)
-	result := cham.NORET
-	switch cmd {
-	case GATE_OPEN:
-		gate.open(args[1].(*Conf))
-	case GATE_KICK:
-		gate.kick(args[1].(uint32))
-	}
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		cmd := args[0].(uint8)
+		result := cham.NORET
+		switch cmd {
+		case GATE_OPEN:
+			gate.Source = source
+			service.RegisterProtocol(cham.PTYPE_RESPONSE, GateResponseStart)
+			GATES[source] = gate
+			gate.open(args[1].(*Conf))
+		case GATE_KICK:
+			gate.kick(args[1].(uint32))
+		}
 
-	return result
+		return result
+	}
 }
 
 //may multi gate

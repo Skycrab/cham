@@ -11,23 +11,27 @@ import (
 	"time"
 )
 
-func WatchDogDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	return cham.NORET
+func watchDogStart(service *cham.Service) cham.Dispatch {
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		return cham.NORET
+	}
 }
 
-func ClientDispatch(service *cham.Service, session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
-	sessionid := args[0].(uint32)
-	data := string(args[1].([]byte))
-	time.Sleep(time.Second * 5)
-	if data == "hello" {
-		service.Notify("gate", cham.PTYPE_RESPONSE, sessionid, []byte("world"))
+func clientDispatch(service *cham.Service) cham.Dispatch {
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		sessionid := args[0].(uint32)
+		data := string(args[1].([]byte))
+		time.Sleep(time.Second * 5)
+		if data == "hello" {
+			service.Notify("gate", cham.PTYPE_RESPONSE, sessionid, []byte("world"))
+		}
+		// go func() {
+		// 	time.Sleep(time.Second * 2)
+		// 	fmt.Println("kick")
+		// 	service.Notify("gate", cham.PTYPE_GO, GATE_KICK, sessionid)
+		// }()
+		return cham.NORET
 	}
-	// go func() {
-	// 	time.Sleep(time.Second * 2)
-	// 	fmt.Println("kick")
-	// 	service.Notify("gate", cham.PTYPE_GO, GATE_KICK, sessionid)
-	// }()
-	return cham.NORET
 }
 
 func runClient(n int) {
@@ -62,9 +66,9 @@ func runClient(n int) {
 }
 
 func TestGateService(t *testing.T) {
-	ws := cham.NewService("watchdog", WatchDogDispatch, 16) // 16 worker to process client data
-	ws.RegisterProtocol(cham.PTYPE_CLIENT, ClientDispatch)
-	gs := cham.NewService("gate", GateDispatch, 16) // 16 worker to send data to client
+	ws := cham.NewService("watchdog", watchDogStart, 16) // 16 worker to process client data
+	ws.RegisterProtocol(cham.PTYPE_CLIENT, clientDispatch)
+	gs := cham.NewService("gate", GateStart, 16) // 16 worker to send data to client
 	ws.Call(gs, cham.PTYPE_GO, GATE_OPEN, NewConf("127.0.0.1:9999", 100))
 	for i := 0; i < 20; i++ {
 		go runClient(i)
