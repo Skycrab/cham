@@ -11,13 +11,13 @@ import (
 	"time"
 )
 
-func watchDogStart(service *cham.Service) cham.Dispatch {
+func watchDogStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		return cham.NORET
 	}
 }
 
-func clientDispatch(service *cham.Service) cham.Dispatch {
+func clientDispatch(service *cham.Service, args ...interface{}) cham.Dispatch {
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		sessionid := args[0].(uint32)
 		data := string(args[1].([]byte))
@@ -56,9 +56,8 @@ func runClient(n int) {
 		length := binary.BigEndian.Uint16(head)
 		result := make([]byte, length)
 		io.ReadFull(conn, result)
-		fmt.Println("client get:", string(result))
-		fmt.Println("***************")
-		time.Sleep(time.Second * 1)
+		fmt.Println("client get:"+i, string(result))
+		time.Sleep(time.Second * 15)
 		// break
 	}
 	fmt.Println("client end" + i)

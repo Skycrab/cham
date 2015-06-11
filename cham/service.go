@@ -16,7 +16,7 @@ var (
 )
 
 type Dispatch func(session int32, source Address, ptype uint8, args ...interface{}) []interface{}
-type Start func(service *Service) Dispatch
+type Start func(service *Service, args ...interface{}) Dispatch
 
 type Msg struct {
 	source  Address
@@ -46,7 +46,7 @@ func NewMsg(source Address, session int32, ptype uint8, args interface{}) *Msg {
 	return &Msg{source, session, ptype, args}
 }
 
-//args[0] is worker number,
+//args[0] is worker number, args[1:] will pass to start
 func NewService(name string, start Start, args ...interface{}) *Service {
 	service := new(Service)
 	service.session = 0
@@ -58,20 +58,21 @@ func NewService(name string, start Start, args ...interface{}) *Service {
 	service.rlock = new(sync.Mutex)
 	service.rcond = sync.NewCond(service.rlock)
 	service.pending = make(map[int32]chan *Msg)
-	service.dispatchs = map[uint8]Dispatch{PTYPE_GO: start(service)}
 
-	master.Register(service)
+	var n int = 1
 	if len(args) > 0 {
-		n := args[0].(int)
+		n = args[0].(int)
 		if n <= 0 {
 			n = DEFAULT_SERVICE_WORKER
 		}
-		for i := 0; i < n; i++ {
-			go service.Start(i)
-		}
+		args = args[1:]
+	}
 
-	} else {
-		go service.Start(0)
+	service.dispatchs = map[uint8]Dispatch{PTYPE_GO: start(service, args...)}
+	master.Register(service)
+
+	for i := 0; i < n; i++ {
+		go service.Start(i)
 	}
 
 	return service
@@ -124,11 +125,11 @@ func (s *Service) dispatchMsg(msg *Msg) {
 	}
 }
 
-func (s *Service) RegisterProtocol(ptype uint8, start Start) {
+func (s *Service) RegisterProtocol(ptype uint8, start Start, args ...interface{}) {
 	if _, ok := s.dispatchs[ptype]; ok {
 		panic(s.String() + "duplicate register protocol")
 	}
-	s.dispatchs[ptype] = start(s)
+	s.dispatchs[ptype] = start(s, args...)
 }
 
 func (s *Service) send(query interface{}, ptype uint8, session int32, args ...interface{}) chan *Msg {

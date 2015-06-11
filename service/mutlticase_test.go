@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func mainStart(service *cham.Service) cham.Dispatch {
+func mainStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		fmt.Println(service)
 		fmt.Println(args)
@@ -15,7 +15,7 @@ func mainStart(service *cham.Service) cham.Dispatch {
 }
 
 // args[0] is channel id
-func chatStart(service *cham.Service) cham.Dispatch {
+func chatStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		fmt.Println(service)
 		fmt.Println(args)
@@ -23,7 +23,7 @@ func chatStart(service *cham.Service) cham.Dispatch {
 	}
 }
 
-func channelStart(service *cham.Service) cham.Dispatch {
+func channelStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		fmt.Println(args)
 		return cham.NORET

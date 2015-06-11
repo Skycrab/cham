@@ -20,7 +20,6 @@ const (
 var (
 	bufioReaderPool sync.Pool
 	bufioWriterPool sync.Pool
-	GATES           map[cham.Address]*Gate
 )
 
 type Conf struct {
@@ -210,17 +209,17 @@ func (g *Gate) Write(sessionid uint32, data []byte) {
 	}
 }
 
-func GateResponseStart(service *cham.Service) cham.Dispatch {
+func GateResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch {
+	gate := args[0].(*Gate)
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		sessionid := args[0].(uint32)
 		data := args[1].([]byte)
-		gate := GATES[source]
 		gate.Write(sessionid, data)
 		return cham.NORET
 	}
 }
 
-func GateStart(service *cham.Service) cham.Dispatch {
+func GateStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	gate := newGate(0)
 
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
@@ -229,8 +228,7 @@ func GateStart(service *cham.Service) cham.Dispatch {
 		switch cmd {
 		case GATE_OPEN:
 			gate.Source = source
-			service.RegisterProtocol(cham.PTYPE_RESPONSE, GateResponseStart)
-			GATES[source] = gate
+			service.RegisterProtocol(cham.PTYPE_RESPONSE, GateResponseStart, gate)
 			gate.open(args[1].(*Conf))
 		case GATE_KICK:
 			gate.kick(args[1].(uint32))
@@ -238,9 +236,4 @@ func GateStart(service *cham.Service) cham.Dispatch {
 
 		return result
 	}
-}
-
-//may multi gate
-func init() {
-	GATES = make(map[cham.Address]*Gate, 1)
 }

@@ -63,7 +63,7 @@ func (m *Multicast) pub(addr cham.Address, ch uint32, args ...interface{}) {
 }
 
 //service self
-func MulticastStart(service *cham.Service) cham.Dispatch {
+func MulticastStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	mul := new(Multicast)
 	mul.channel = 0
 	mul.groups = make(map[uint32]map[cham.Address]cham.NULL, DEFAULT_GROUP_SIZE)
