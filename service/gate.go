@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"cham/cham"
 	"encoding/binary"
-	// "fmt"
+	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
-	// "time"
 )
 
 const (
@@ -25,66 +25,35 @@ var (
 type Conf struct {
 	address   string //127.0.0.1:8000
 	maxclient uint32 // 0 -> no limit
+	path      string // "/ws" websocket, null is tcp
+}
+
+func NewConf(address string, maxclient uint32, path string) *Conf {
+	return &Conf{address, maxclient, path}
 }
 
 type Gate struct {
 	rwmutex   *sync.RWMutex
 	Source    cham.Address
+	dest      *cham.Service
+	session   uint32
 	clinetnum uint32
 	maxclient uint32
-	quit      chan struct{}
-	sessions  map[uint32]*Session
+	sessions  map[uint32]Backend
 }
 
-type Session struct {
-	sessionid uint32
-	conn      net.Conn
-	brw       *bufio.ReadWriter
+type Backend interface {
+	Write(data []byte)
+	Close()
 }
 
-func (s *Session) Close() {
-	putBufioReader(s.brw.Reader)
-	putBufioWriter(s.brw.Writer)
-	s.conn.Close()
+type TcpBackend struct {
+	session uint32
+	conn    net.Conn
+	brw     *bufio.ReadWriter
 }
 
-func (s *Session) Write(data []byte) {
-	head := make([]byte, 2)
-	binary.BigEndian.PutUint16(head, uint16(len(data)))
-	s.brw.Write(head)
-	s.brw.Write(data)
-	s.brw.Flush()
-}
-
-func NewConf(address string, maxclient uint32) *Conf {
-	return &Conf{address, maxclient}
-}
-
-func newSession(sessionid uint32, conn net.Conn) *Session {
-	br := newBufioReader(conn)
-	bw := newBufioWriter(conn)
-	return &Session{sessionid, conn, bufio.NewReadWriter(br, bw)}
-}
-
-func (s *Session) ReadFull(buf []byte) error {
-	if _, err := io.ReadFull(s.brw, buf); err != nil {
-		if e, ok := err.(net.Error); ok && !e.Temporary() {
-			return err
-		}
-	}
-	return nil
-}
-
-func newGate(source cham.Address) *Gate {
-	gate := new(Gate)
-	gate.rwmutex = new(sync.RWMutex)
-	gate.Source = source
-	gate.clinetnum = 0
-	gate.quit = make(chan struct{})
-	gate.sessions = make(map[uint32]*Session)
-	return gate
-}
-
+// tcp readbuf start
 func newBufioReader(r io.Reader) *bufio.Reader {
 	if v := bufioReaderPool.Get(); v != nil {
 		br := v.(*bufio.Reader)
@@ -113,99 +82,195 @@ func putBufioWriter(w *bufio.Writer) {
 	bufioWriterPool.Put(w)
 }
 
-//gate listen
-func (g *Gate) open(conf *Conf) bool {
-	listen, err := net.Listen("tcp", conf.address)
-	if err != nil {
-		panic("gate open error:" + err.Error())
-	}
-	g.maxclient = conf.maxclient
-	go g.start(listen)
-
-	return true
+func newTcpBackend(session uint32, conn net.Conn) *TcpBackend {
+	br := newBufioReader(conn)
+	bw := newBufioWriter(conn)
+	return &TcpBackend{session, conn, bufio.NewReadWriter(br, bw)}
 }
 
-func (g *Gate) close() {
-	close(g.quit)
+// tcp readbuf end
+
+func (t *TcpBackend) Close() {
+	putBufioReader(t.brw.Reader)
+	putBufioWriter(t.brw.Writer)
+	t.conn.Close()
 }
 
-func (g *Gate) start(listen net.Listener) {
-	defer listen.Close()
-	var sessionId uint32 = 0
-	for {
-		select {
-		case <-g.quit:
-			return
-		default:
-			conn, err := listen.Accept()
-			if err != nil {
-				continue
-			}
-			if g.maxclient != 0 && g.clinetnum >= g.maxclient {
-				conn.Close() //server close socket(!net.Error)
-				break
-			}
-			g.clinetnum++
-			sid := atomic.AddUint32(&sessionId, 1)
-			session := newSession(sid, conn)
-			g.rwmutex.Lock()
-			g.sessions[sid] = session
-			g.rwmutex.Unlock()
-			go g.serve(session)
+func (t *TcpBackend) Write(data []byte) {
+	head := make([]byte, 2)
+	binary.BigEndian.PutUint16(head, uint16(len(data)))
+	t.brw.Write(head)
+	t.brw.Write(data)
+	t.brw.Flush()
+}
+
+func (t *TcpBackend) readFull(buf []byte) error {
+	if _, err := io.ReadFull(t.brw, buf); err != nil {
+		if e, ok := err.(net.Error); ok && !e.Temporary() {
+			return err
 		}
 	}
+	return nil
 }
 
 // bigendian 2byte length+data
-func (g *Gate) serve(session *Session) {
+func (t *TcpBackend) serve(g *Gate) {
 	head := make([]byte, 2)
-	dest := g.Source.GetService()
 	for {
-		if err := session.ReadFull(head); err != nil {
-			g.closeSession(session)
+		if err := t.readFull(head); err != nil {
+			g.kick(t.session)
 			return
 		}
 
 		length := binary.BigEndian.Uint16(head)
 		data := make([]byte, length, length)
 
-		if err := session.ReadFull(data); err != nil {
-			g.closeSession(session)
+		if err := t.readFull(data); err != nil {
+			g.kick(t.session)
 			return
 		}
-		msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(session.sessionid, data))
-		dest.Push(msg)
+		msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(t.session, data))
+		g.dest.Push(msg)
 	}
 }
 
-func (g *Gate) closeSession(s *Session) {
-	g.rwmutex.Lock()
-	delete(g.sessions, s.sessionid)
-	g.clinetnum--
-	g.rwmutex.Unlock()
-	s.Close()
+type WebsocketBackend struct {
+	*Websocket
 }
 
-func (g *Gate) kick(sessionid uint32) {
-	var session *Session
+func (w *WebsocketBackend) Close() {
+	w.Websocket.Close(0, []byte("kick"))
+}
+
+func (w *WebsocketBackend) Write(data []byte) {
+	w.SendText(data)
+}
+
+func newWebsocket(w http.ResponseWriter, r *http.Request, opt *Option, session uint32, gate *Gate) (*WebsocketBackend, error) {
+	ws, err := NewWebsocket(w, r, opt, session, gate)
+	if err != nil {
+		return nil, err
+	}
+	return &WebsocketBackend{ws}, nil
+}
+
+//websocket start
+type wsHandler struct {
+}
+
+func (wd wsHandler) CheckOrigin(origin, host string) bool {
+	return true
+}
+
+func (wd wsHandler) OnOpen(ws *Websocket) {
+	fmt.Println("OnOpen")
+}
+
+func (wd wsHandler) OnMessage(ws *Websocket, message []byte) {
+	// fmt.Println("OnMessage:", string(message), len(message))
+	msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(ws.session, message))
+	ws.gate.dest.Push(msg)
+}
+
+func (wd wsHandler) OnClose(ws *Websocket, code uint16, reason []byte) {
+	fmt.Println("OnClose", code, string(reason))
+}
+
+func (wd wsHandler) OnPong(ws *Websocket, data []byte) {
+	fmt.Println("OnPong:", string(data))
+
+}
+
+//websocket end
+
+func newGate(source cham.Address) *Gate {
+	gate := new(Gate)
+	gate.rwmutex = new(sync.RWMutex)
+	gate.Source = source
+	gate.clinetnum = 0
+	gate.session = 0
+	gate.sessions = make(map[uint32]Backend)
+	return gate
+}
+
+func (g *Gate) nextSession() uint32 {
+	return atomic.AddUint32(&g.session, 1)
+}
+
+func (g *Gate) addBackend(session uint32, b Backend) {
+	g.rwmutex.Lock()
+	g.sessions[session] = b
+	g.rwmutex.Unlock()
+}
+
+//gate listen
+func (g *Gate) open(conf *Conf) {
+	maxclient := conf.maxclient
+	g.maxclient = maxclient
+	if conf.path == "" {
+		listen, err := net.Listen("tcp", conf.address)
+		if err != nil {
+			panic("gate http open error:" + err.Error())
+		}
+		go func() {
+			defer listen.Close()
+			for {
+				conn, err := listen.Accept()
+				if err != nil {
+					continue
+				}
+				if maxclient != 0 && g.clinetnum >= maxclient {
+					conn.Close() //server close socket(!net.Error)
+					break
+				}
+				g.clinetnum++
+				session := g.nextSession()
+				backend := newTcpBackend(session, conn)
+				g.sessions[session] = backend // not need mutex, so not addBackend
+				go backend.serve(g)
+			}
+		}()
+
+	} else {
+		var opt = Option{wsHandler{}, false}
+		http.HandleFunc(conf.path, func(w http.ResponseWriter, r *http.Request) {
+
+			if maxclient != 0 && g.clinetnum >= maxclient {
+				return
+			}
+			session := g.nextSession()
+			ws, err := newWebsocket(w, r, &opt, session, g)
+			if err != nil {
+				return
+			}
+			g.addBackend(session, ws)
+			g.clinetnum++
+			ws.Start()
+		})
+		go func() { http.ListenAndServe(conf.address, nil) }()
+	}
+}
+
+func (g *Gate) kick(session uint32) {
+	var b Backend
 	var ok bool
 	g.rwmutex.Lock()
-	if session, ok = g.sessions[sessionid]; ok {
-		delete(g.sessions, sessionid)
+	if b, ok = g.sessions[session]; ok {
+		delete(g.sessions, session)
 		g.clinetnum--
 	}
 	g.rwmutex.Unlock()
 	if ok {
-		session.Close()
+		b.Close()
 	}
 }
 
-func (g *Gate) Write(sessionid uint32, data []byte) {
+func (g *Gate) Write(session uint32, data []byte) {
 	g.rwmutex.RLock()
-	session, ok := g.sessions[sessionid]
+	b, ok := g.sessions[session]
 	g.rwmutex.RUnlock()
 	if ok {
-		session.Write(data)
+		b.Write(data)
 	}
 }
 
@@ -221,13 +286,13 @@ func GateResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch
 
 func GateStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	gate := newGate(0)
-
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		cmd := args[0].(uint8)
 		result := cham.NORET
 		switch cmd {
 		case GATE_OPEN:
 			gate.Source = source
+			gate.dest = source.GetService()
 			service.RegisterProtocol(cham.PTYPE_RESPONSE, GateResponseStart, gate)
 			gate.open(args[1].(*Conf))
 		case GATE_KICK:

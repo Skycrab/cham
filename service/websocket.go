@@ -1,4 +1,4 @@
-package websocket
+package service
 
 import (
 	"bufio"
@@ -67,6 +67,8 @@ func (wd WsDefaultHandler) OnPong(ws *Websocket, data []byte) {
 
 type Websocket struct {
 	conn             net.Conn
+	session          uint32
+	gate             *Gate
 	rw               *bufio.ReadWriter
 	handler          WsHandler
 	clientTerminated bool
@@ -149,7 +151,7 @@ func websocketMask(mask []byte, data []byte) {
 	}
 }
 
-func New(w http.ResponseWriter, r *http.Request, opt *Option) (*Websocket, error) {
+func NewWebsocket(w http.ResponseWriter, r *http.Request, opt *Option, session uint32, gate *Gate) (*Websocket, error) {
 
 	var h WsHandler
 	var maskOutgoing bool
@@ -181,6 +183,8 @@ func New(w http.ResponseWriter, r *http.Request, opt *Option) (*Websocket, error
 	conn, rw, err := hj.Hijack()
 
 	ws := new(Websocket)
+	ws.session = session
+	ws.gate = gate
 	ws.conn = conn
 	ws.rw = rw
 	ws.handler = h
