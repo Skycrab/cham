@@ -17,7 +17,7 @@ type Loggers struct {
 
 func Start(service *cham.Service, args ...interface{}) cham.Dispatch {
 	loggers := new(Loggers)
-	return func(session int32, source cham.Address, ptypt uint8, args ...interface{}) []interface{} {
+	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		cmd := args[0].(uint8)
 		switch cmd {
 		case OPEN:

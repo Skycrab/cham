@@ -9,7 +9,7 @@ import (
 )
 
 func helloStart(service *Service, args ...interface{}) Dispatch {
-	return func(session int32, source Address, ptypt uint8, args ...interface{}) []interface{} {
+	return func(session int32, source Address, ptype uint8, args ...interface{}) []interface{} {
 		fmt.Println(session, source, args)
 		time.Sleep(time.Second * 4)
 		cmd := args[0].(string)
