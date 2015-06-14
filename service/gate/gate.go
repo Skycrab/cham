@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	GATE_OPEN uint8 = iota
-	GATE_KICK
+	OPEN uint8 = iota
+	KICK
 )
 
 var (
@@ -274,7 +274,7 @@ func (g *Gate) Write(session uint32, data []byte) {
 	}
 }
 
-func GateResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch {
+func ResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	gate := args[0].(*Gate)
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		sessionid := args[0].(uint32)
@@ -284,18 +284,18 @@ func GateResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch
 	}
 }
 
-func GateStart(service *cham.Service, args ...interface{}) cham.Dispatch {
+func Start(service *cham.Service, args ...interface{}) cham.Dispatch {
 	gate := New(0)
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		cmd := args[0].(uint8)
 		result := cham.NORET
 		switch cmd {
-		case GATE_OPEN:
+		case OPEN:
 			gate.Source = source
 			gate.dest = source.GetService()
-			service.RegisterProtocol(cham.PTYPE_RESPONSE, GateResponseStart, gate)
+			service.RegisterProtocol(cham.PTYPE_RESPONSE, ResponseStart, gate)
 			gate.open(args[1].(*Conf))
-		case GATE_KICK:
+		case KICK:
 			gate.kick(args[1].(uint32))
 		}
 

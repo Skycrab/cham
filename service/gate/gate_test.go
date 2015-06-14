@@ -30,7 +30,7 @@ func clientDispatch(service *cham.Service, args ...interface{}) cham.Dispatch {
 		go func() {
 			time.Sleep(time.Second * 2)
 			fmt.Println("kick")
-			service.Notify("gate", cham.PTYPE_GO, GATE_KICK, sessionid)
+			service.Notify("gate", cham.PTYPE_GO, KICK, sessionid)
 		}()
 		return cham.NORET
 	}
@@ -69,8 +69,8 @@ func runClient(n int) {
 func TestGateService(t *testing.T) {
 	ws := cham.NewService("watchdog", watchDogStart, 16) // 16 worker to process client data
 	ws.RegisterProtocol(cham.PTYPE_CLIENT, clientDispatch)
-	gs := cham.NewService("gate", GateStart, 16) // 16 worker to send data to client
-	ws.Call(gs, cham.PTYPE_GO, GATE_OPEN, NewConf("127.0.0.1:9999", 100, ""))
+	gs := cham.NewService("gate", Start, 16) // 16 worker to send data to client
+	ws.Call(gs, cham.PTYPE_GO, OPEN, NewConf("127.0.0.1:9999", 100, ""))
 	for i := 0; i < 20; i++ {
 		go runClient(i)
 	}
@@ -78,9 +78,9 @@ func TestGateService(t *testing.T) {
 }
 
 func TestGateWsService(t *testing.T) {
-	gs := cham.NewService("gate", GateStart, 16)         // 16 worker to send data to clie
+	gs := cham.NewService("gate", Start, 16)             // 16 worker to send data to clie
 	ws := cham.NewService("watchdog", watchDogStart, 16) // 16 worker to process client data
 	ws.RegisterProtocol(cham.PTYPE_CLIENT, clientDispatch)
-	ws.Call(gs, cham.PTYPE_GO, GATE_OPEN, NewConf("127.0.0.1:9998", 100, "/ws"))
+	ws.Call(gs, cham.PTYPE_GO, OPEN, NewConf("127.0.0.1:9998", 100, "/ws"))
 	time.Sleep(time.Minute * 10)
 }

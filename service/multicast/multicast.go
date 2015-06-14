@@ -12,11 +12,11 @@ const (
 )
 
 const (
-	MULTICAST_NEW uint8 = iota
-	MULTICAST_SUB
-	MULTICAST_PUB
-	MULTICAST_UNSUB
-	MULTICAST_DEL
+	NEW uint8 = iota
+	SUB
+	PUB
+	UNSUB
+	DEL
 )
 
 type Multicast struct {
@@ -63,7 +63,7 @@ func (m *Multicast) pub(addr cham.Address, ch uint32, args ...interface{}) {
 }
 
 //service self
-func MulticastStart(service *cham.Service, args ...interface{}) cham.Dispatch {
+func Start(service *cham.Service, args ...interface{}) cham.Dispatch {
 	mul := new(Multicast)
 	mul.channel = 0
 	mul.groups = make(map[uint32]map[cham.Address]cham.NULL, DEFAULT_GROUP_SIZE)
@@ -76,15 +76,15 @@ func MulticastStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 		result := cham.NORET
 
 		switch cmd {
-		case MULTICAST_NEW:
+		case NEW:
 			result = cham.Ret(mul.new(addr))
-		case MULTICAST_SUB:
+		case SUB:
 			mul.sub(addr, channel)
-		case MULTICAST_PUB:
+		case PUB:
 			mul.pub(addr, channel, args[3:]...)
-		case MULTICAST_UNSUB:
+		case UNSUB:
 			mul.unsub(addr, channel)
-		case MULTICAST_DEL:
+		case DEL:
 			mul.del(channel)
 		}
 		return result
