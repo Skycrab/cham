@@ -1,4 +1,4 @@
-package service
+package gate
 
 import (
 	"bufio"
@@ -183,7 +183,7 @@ func (wd wsHandler) OnPong(ws *Websocket, data []byte) {
 
 //websocket end
 
-func newGate(source cham.Address) *Gate {
+func New(source cham.Address) *Gate {
 	gate := new(Gate)
 	gate.rwmutex = new(sync.RWMutex)
 	gate.Source = source
@@ -285,7 +285,7 @@ func GateResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch
 }
 
 func GateStart(service *cham.Service, args ...interface{}) cham.Dispatch {
-	gate := newGate(0)
+	gate := New(0)
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		cmd := args[0].(uint8)
 		result := cham.NORET

@@ -1,4 +1,4 @@
-package service
+package multicast
 
 import (
 	"cham/cham"
@@ -35,10 +35,10 @@ func TestMulticast(t *testing.T) {
 	chat1 := cham.NewService("chat1", chatStart)
 	chat2 := cham.NewService("chat2", chatStart)
 	//create a channel
-	channel := NewChannel(main, 0, channelStart)
+	channel := New(main, 0, channelStart)
 	//bind a channel
-	chat1Channel := NewChannel(chat1, channel.Channel, channelStart)
-	chat2Channel := NewChannel(chat2, channel.Channel, channelStart)
+	chat1Channel := New(chat1, channel.Channel, channelStart)
+	chat2Channel := New(chat2, channel.Channel, channelStart)
 	chat1Channel.Subscribe()
 	chat2Channel.Subscribe()
 	channel.Publish("hello world")

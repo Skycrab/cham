@@ -1,4 +1,4 @@
-package service
+package gate
 
 import (
 	"cham/cham"
