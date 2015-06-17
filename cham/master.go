@@ -2,6 +2,7 @@ package cham
 
 import (
 	// "runtime"
+	"strings"
 	"sync"
 )
 
@@ -84,6 +85,21 @@ func (m *Master) UniqueService(name string) *Service {
 	} else {
 		return nil
 	}
+}
+
+func (m *Master) AllService() map[Address]*Service {
+	m.RLock()
+	defer m.RUnlock()
+	return master.services
+}
+
+func DumpService() string {
+	services := master.AllService()
+	info := make([]string, 0, len(services))
+	for _, s := range services {
+		info = append(info, s.String())
+	}
+	return strings.Join(info, "\r\n")
 }
 
 func init() {

@@ -181,7 +181,7 @@ func (s *Service) Stop() bool {
 }
 
 func (s *Service) String() string {
-	return fmt.Sprintf("SERVICE[addr->%d, name->%s]:", s.Addr, s.Name)
+	return fmt.Sprintf("SERVICE [addr->%d, name->%s] ", s.Addr, s.Name)
 }
 
 func (s *Service) Status() int {
