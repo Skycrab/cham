@@ -2,6 +2,7 @@ package multicast
 
 import (
 	"cham/cham"
+	"cham/service/log"
 	// "fmt"
 	"sync/atomic"
 )
@@ -64,6 +65,7 @@ func (m *Multicast) pub(addr cham.Address, ch uint32, args ...interface{}) {
 
 //service self
 func Start(service *cham.Service, args ...interface{}) cham.Dispatch {
+	log.Infoln("New Service ", service.String())
 	mul := new(Multicast)
 	mul.channel = 0
 	mul.groups = make(map[uint32]map[cham.Address]cham.NULL, DEFAULT_GROUP_SIZE)

@@ -3,6 +3,7 @@ package gate
 import (
 	"bufio"
 	"cham/cham"
+	"cham/service/log"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -208,6 +209,7 @@ func (g *Gate) open(conf *Conf) {
 	maxclient := conf.maxclient
 	g.maxclient = maxclient
 	if conf.path == "" {
+		log.Infoln("Tcp Gate start, listen ", conf.address)
 		listen, err := net.Listen("tcp", conf.address)
 		if err != nil {
 			panic("gate http open error:" + err.Error())
@@ -232,6 +234,7 @@ func (g *Gate) open(conf *Conf) {
 		}()
 
 	} else {
+		log.Infoln("Websocket Gate start, listen ", conf.address)
 		var opt = Option{wsHandler{}, false}
 		http.HandleFunc(conf.path, func(w http.ResponseWriter, r *http.Request) {
 
@@ -285,6 +288,7 @@ func ResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 }
 
 func Start(service *cham.Service, args ...interface{}) cham.Dispatch {
+	log.Infoln("New Service ", service.String())
 	gate := New(0)
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		cmd := args[0].(uint8)
