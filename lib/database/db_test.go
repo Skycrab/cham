@@ -42,19 +42,21 @@ func TestTableName(t *testing.T) {
 
 func TestQuery(t *testing.T) {
 	uu := &UserWithName{}
-	fmt.Println(query(uu, "name", 0))
+	fmt.Println(query(uu, "name", "", 0))
 }
 
 func TestGet(t *testing.T) {
 	u := &User{}
 	d := &Database{db}
-	fmt.Println(d.Get(u, "id", 1))
+	fmt.Println(d.Get(u, "id", 3))
 	fmt.Println(u)
 
 	fmt.Println("------------------")
-	v, e := d.GetMultiIn(u, "id", 3, 4)
+	// v, e := d.GetMultiIn(u, "id", 3, 4)
+	v, e := d.GetCondition(&User{}, "where id >3 and id <? and name=?", 10, "kehan")
+	// v, e := d.GetCondition(&User{}, nil) // select all
 	if e != nil {
-		t.Error("GetMultiIn error")
+		t.Error("GetMultiIn error," + e.Error())
 	} else {
 		for _, m := range v {
 			fmt.Println(m.(*User))

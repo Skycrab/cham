@@ -3,7 +3,7 @@ package database
 import (
 	"bytes"
 	"database/sql"
-	// "fmt"
+	"fmt"
 	"reflect"
 	"strings"
 )
@@ -33,7 +33,7 @@ func (d *Database) Close() {
 //need value to reduce once reflect expense
 // d.Get(&User{}, "openid", "123456")
 func (d *Database) Get(m Model, field string, value interface{}) error {
-	q, n := query(m, field, 0)
+	q, n := query(m, field, "", 0)
 	row := d.db.QueryRow(q, value)
 	v := reflect.ValueOf(m).Elem()
 	args := make([]interface{}, n)
@@ -48,11 +48,9 @@ func (d *Database) GetPk(m Model, value interface{}) error {
 	return d.Get(m, primaryKey, value)
 }
 
-//mysql in usage
-// ms := d.GetMultiIn(&User{}, "openid", "12", "34")
-// ms[0].(*User) [return interface{} need type change]
-func (d *Database) GetMultiIn(m Model, field string, value ...interface{}) (ms []Model, err error) {
-	q, n := query(m, field, len(value))
+func (d *Database) Select(m Model, field string, condition interface{}, value ...interface{}) (ms []Model, err error) {
+	q, n := query(m, field, condition, len(value))
+	fmt.Println(q)
 	rows, err := d.db.Query(q, value...)
 	if err != nil {
 		return
@@ -72,6 +70,18 @@ func (d *Database) GetMultiIn(m Model, field string, value ...interface{}) (ms [
 	}
 	err = rows.Err()
 	return
+}
+
+// d.GetCondition(&User{}, "where level >10 and money <? limit ?, 10", 100, 5)
+func (d *Database) GetCondition(m Model, condition interface{}, value ...interface{}) ([]Model, error) {
+	return d.Select(m, "", condition, value...)
+}
+
+//mysql in usage
+// ms := d.GetMultiIn(&User{}, "openid", "12", "34")
+// ms[0].(*User) [return interface{} need type change]
+func (d *Database) GetMultiIn(m Model, field string, value ...interface{}) ([]Model, error) {
+	return d.Select(m, field, "", value...)
 }
 
 func (d *Database) GetMultiPkIn(m Model, value ...interface{}) ([]Model, error) {
@@ -181,30 +191,39 @@ func tableName(m Model) string {
 
 // m must reflect.Ptr
 // inlen : multiIN number
-func query(m Model, field string, inlen int) (string, int) {
+// condition nil -> select all, string -> condition
+func query(m Model, field string, condition interface{}, inlen int) (string, int) {
 	buf := bytes.NewBufferString("SELECT ")
 	keys, n, _ := structKeys(m, true)
 	buf.WriteString(strings.Join(keys, ", "))
 	buf.WriteString(" FROM ")
 	buf.WriteString(tableName(m))
-	buf.WriteString(" Where ")
-	buf.WriteString(field)
-	if inlen <= 0 {
-		buf.WriteString("=?")
-	} else {
-		buf.WriteString(" IN(")
-		var tmp2 []string
-		// try reuse keys
-		if cap(keys) >= inlen {
-			tmp2 = keys[0:0]
+
+	if condition != nil {
+		if c, ok := condition.(string); ok && c != "" {
+			buf.WriteByte(' ')
+			buf.WriteString(c)
 		} else {
-			tmp2 = make([]string, 0, inlen)
+			buf.WriteString(" Where ")
+			buf.WriteString(field)
+			if inlen <= 0 {
+				buf.WriteString("=?")
+			} else {
+				buf.WriteString(" IN(")
+				var tmp2 []string
+				// try reuse keys
+				if cap(keys) >= inlen {
+					tmp2 = keys[0:0]
+				} else {
+					tmp2 = make([]string, 0, inlen)
+				}
+				for i := 0; i < inlen; i++ {
+					tmp2 = append(tmp2, "?")
+				}
+				buf.WriteString(strings.Join(tmp2, ", "))
+				buf.WriteString(")")
+			}
 		}
-		for i := 0; i < inlen; i++ {
-			tmp2 = append(tmp2, "?")
-		}
-		buf.WriteString(strings.Join(tmp2, ", "))
-		buf.WriteString(")")
 	}
 	return buf.String(), n
 }
