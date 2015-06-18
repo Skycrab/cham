@@ -20,18 +20,29 @@ func watchDogStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 func clientDispatch(service *cham.Service, args ...interface{}) cham.Dispatch {
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		sessionid := args[0].(uint32)
-		data := string(args[1].([]byte))
+		gt := args[1].(uint8)
 		time.Sleep(time.Second * 5)
-		if data == "hello" {
-			service.Notify("gate", cham.PTYPE_RESPONSE, sessionid, []byte("world"))
-		} else if data == "WebSocket" {
-			service.Notify("gate", cham.PTYPE_RESPONSE, sessionid, []byte("websocket reply"))
+		switch gt {
+		case OnOpen:
+			fmt.Println("OnOpen ", sessionid)
+		case OnClose:
+			fmt.Println("OnClose ", sessionid, args[2:])
+		case OnPong:
+			fmt.Println("OnPong ", sessionid, args[2])
+		case OnMessage:
+			data := string(args[2].([]byte))
+			fmt.Println("OnMessage", sessionid, data)
+			if data == "hello" {
+				service.Notify("gate", cham.PTYPE_RESPONSE, sessionid, []byte("world"+strconv.Itoa(int(sessionid))))
+			} else if data == "WebSocket" {
+				service.Notify("gate", cham.PTYPE_RESPONSE, sessionid, []byte("websocket reply"+strconv.Itoa(int(sessionid))))
+			}
+			// go func() {
+			// 	time.Sleep(time.Second * 2)
+			// 	fmt.Println("kick")
+			// 	service.Notify("gate", cham.PTYPE_GO, KICK, sessionid)
+			// }()
 		}
-		go func() {
-			time.Sleep(time.Second * 2)
-			fmt.Println("kick")
-			service.Notify("gate", cham.PTYPE_GO, KICK, sessionid)
-		}()
 		return cham.NORET
 	}
 }

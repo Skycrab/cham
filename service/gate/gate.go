@@ -5,7 +5,6 @@ import (
 	"cham/cham"
 	"cham/service/log"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -16,6 +15,13 @@ import (
 const (
 	OPEN uint8 = iota
 	KICK
+)
+
+const (
+	OnOpen uint8 = iota
+	OnMessage
+	OnClose
+	OnPong
 )
 
 var (
@@ -36,7 +42,7 @@ func NewConf(address string, maxclient uint32, path string) *Conf {
 type Gate struct {
 	rwmutex   *sync.RWMutex
 	Source    cham.Address
-	dest      *cham.Service
+	service   *cham.Service
 	session   uint32
 	clinetnum uint32
 	maxclient uint32
@@ -130,8 +136,7 @@ func (t *TcpBackend) serve(g *Gate) {
 			g.kick(t.session)
 			return
 		}
-		msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(t.session, data))
-		g.dest.Push(msg)
+		g.service.Notify(g.Source, cham.PTYPE_CLIENT, t.session, OnMessage, data)
 	}
 }
 
@@ -140,7 +145,7 @@ type WebsocketBackend struct {
 }
 
 func (w *WebsocketBackend) Close() {
-	w.Websocket.Close(0, []byte("kick"))
+	w.Websocket.Close(0, []byte(""))
 }
 
 func (w *WebsocketBackend) Write(data []byte) {
@@ -164,29 +169,27 @@ func (wd wsHandler) CheckOrigin(origin, host string) bool {
 }
 
 func (wd wsHandler) OnOpen(ws *Websocket) {
-	fmt.Println("OnOpen")
+	ws.gate.service.Notify(ws.gate.Source, cham.PTYPE_CLIENT, ws.session, OnOpen)
 }
 
 func (wd wsHandler) OnMessage(ws *Websocket, message []byte) {
-	// fmt.Println("OnMessage:", string(message), len(message))
-	msg := cham.NewMsg(0, 0, cham.PTYPE_CLIENT, cham.Ret(ws.session, message))
-	ws.gate.dest.Push(msg)
+	ws.gate.service.Notify(ws.gate.Source, cham.PTYPE_CLIENT, ws.session, OnMessage, message)
 }
 
 func (wd wsHandler) OnClose(ws *Websocket, code uint16, reason []byte) {
-	fmt.Println("OnClose", code, string(reason))
+	ws.gate.service.Notify(ws.gate.Source, cham.PTYPE_CLIENT, ws.session, OnClose, code, reason)
 }
 
 func (wd wsHandler) OnPong(ws *Websocket, data []byte) {
-	fmt.Println("OnPong:", string(data))
-
+	ws.gate.service.Notify(ws.gate.Source, cham.PTYPE_CLIENT, ws.session, OnPong, data)
 }
 
 //websocket end
 
-func New(source cham.Address) *Gate {
+func New(source cham.Address, service *cham.Service) *Gate {
 	gate := new(Gate)
 	gate.rwmutex = new(sync.RWMutex)
+	gate.service = service
 	gate.Source = source
 	gate.clinetnum = 0
 	gate.session = 0
@@ -289,14 +292,13 @@ func ResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 
 func Start(service *cham.Service, args ...interface{}) cham.Dispatch {
 	log.Infoln("New Service ", service.String())
-	gate := New(0)
+	gate := New(0, service)
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		cmd := args[0].(uint8)
 		result := cham.NORET
 		switch cmd {
 		case OPEN:
 			gate.Source = source
-			gate.dest = source.GetService()
 			service.RegisterProtocol(cham.PTYPE_RESPONSE, ResponseStart, gate)
 			gate.open(args[1].(*Conf))
 		case KICK:
