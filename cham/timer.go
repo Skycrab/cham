@@ -76,7 +76,7 @@ func (t *Timer) addNode(n *Node) {
 
 }
 
-func (t *Timer) NewTimer(d time.Duration, f func()) *Node {
+func (t *Timer) Timeout(d time.Duration, f func()) *Node {
 	n := new(Node)
 	n.f = f
 	t.Lock()

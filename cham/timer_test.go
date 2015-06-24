@@ -27,8 +27,8 @@ func TestTimer(t *testing.T) {
 	fmt.Println(timer)
 	var i int32
 	for i = 0; i < N; i++ {
-		timer.NewTimer(time.Millisecond*time.Duration(10*i), now)
-		timer.NewTimer(time.Millisecond*time.Duration(10*i), now)
+		timer.Timeout(time.Millisecond*time.Duration(10*i), now)
+		timer.Timeout(time.Millisecond*time.Duration(10*i), now)
 	}
 	timer.Start()
 	if sum != 2*N {
