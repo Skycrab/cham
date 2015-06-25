@@ -115,5 +115,6 @@ func TestReStore(t *testing.T) {
 	assert(t, len(z.tbl) == 0, "restore error")
 	z.ReStore("zdb.json")
 	fmt.Println(z.tbl)
-	assert(t, len(z.tbl) != 0, "restore error")
+	assert(t, len(z.tbl) != 0, "restore2 error")
+	assert(t, z.Count() == len(z.tbl), "restore3 error")
 }

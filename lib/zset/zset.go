@@ -220,9 +220,13 @@ func (z *zset) ReStore(name string) error {
 	if err != nil {
 		return err
 	}
+	tbl := make(map[string]float64, DEFAULT_TBL_LEN)
 	buf := bufio.NewReader(f)
 	decoder := json.NewDecoder(buf)
-	decoder.Decode(&z.tbl)
+	decoder.Decode(&tbl)
+	for k, v := range tbl {
+		z.Add(v, k)
+	}
 	f.Close()
 	return nil
 }
