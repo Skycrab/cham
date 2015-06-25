@@ -4,6 +4,11 @@ package zset
 import "C"
 
 import (
+	"bufio"
+	"cham/lib/helper"
+	"encoding/json"
+	"errors"
+	"os"
 	"reflect"
 	"runtime"
 	"unsafe"
@@ -184,4 +189,40 @@ func (z *zset) RevLimit(count int) int {
 
 func (z *zset) Dump() {
 	C.slDump(z.sl)
+}
+
+//use fork snapshot to save
+func (z *zset) BgStore(name string) error {
+	f, err := helper.LockFile(name, true)
+	if err != nil {
+		return err
+	}
+	pid, errno := helper.Fork()
+	if errno != 0 {
+		return errors.New("fork error," + errno.Error())
+	}
+	//child
+	if pid == 0 {
+		buf := bufio.NewWriter(f)
+		encoder := json.NewEncoder(buf)
+		encoder.Encode(z.tbl)
+		buf.Flush()
+		f.Close()
+		os.Exit(0)
+	}
+
+	return nil
+
+}
+
+func (z *zset) ReStore(name string) error {
+	f, err := helper.LockFile(name, false)
+	if err != nil {
+		return err
+	}
+	buf := bufio.NewReader(f)
+	decoder := json.NewDecoder(buf)
+	decoder.Decode(&z.tbl)
+	f.Close()
+	return nil
 }

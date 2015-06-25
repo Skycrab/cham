@@ -3,6 +3,7 @@ package zset
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 func equal(a []string, b []string) bool {
@@ -92,4 +93,27 @@ func TestLimit(t *testing.T) {
 	z.Dump()
 	assert(t, z.RevLimit(4) == 0, "RevLimit error")
 	assert(t, z.RevLimit(0) == 4, "RevLimit2 error")
+}
+
+func TestStore(t *testing.T) {
+	z := New()
+	z.Add(1, "1")
+	z.Add(2, "2")
+	z.Add(3, "3")
+	z.BgStore("zdb.json")
+	go func() {
+		time.Sleep(time.Second * 2)
+		fmt.Println("continue add")
+		z.Add(4, "4")
+		z.Add(5, "5")
+	}()
+
+}
+
+func TestReStore(t *testing.T) {
+	z := New()
+	assert(t, len(z.tbl) == 0, "restore error")
+	z.ReStore("zdb.json")
+	fmt.Println(z.tbl)
+	assert(t, len(z.tbl) != 0, "restore error")
 }
