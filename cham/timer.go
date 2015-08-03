@@ -29,7 +29,8 @@ type Timer struct {
 
 type Node struct {
 	expire uint32
-	f      func()
+	period time.Duration
+	C      chan time.Time
 }
 
 func (n *Node) String() string {
@@ -76,9 +77,21 @@ func (t *Timer) addNode(n *Node) {
 
 }
 
-func (t *Timer) Timeout(d time.Duration, f func()) *Node {
+func (t *Timer) NewTicker(d time.Duration) *Node {
 	n := new(Node)
-	n.f = f
+	n.C = make(chan time.Time, 1)
+	n.period = d
+	t.Lock()
+	n.expire = uint32(d/t.tick) + t.time
+	t.addNode(n)
+	t.Unlock()
+	return n
+}
+
+func (t *Timer) NewTimer(d time.Duration) *Node {
+	n := new(Node)
+	n.C = make(chan time.Time, 1)
+	n.period = 0
 	t.Lock()
 	n.expire = uint32(d/t.tick) + t.time
 	t.addNode(n)
@@ -90,10 +103,20 @@ func (t *Timer) String() string {
 	return fmt.Sprintf("Timer:time:%d, tick:%s", t.time, t.tick)
 }
 
-func dispatchList(front *list.Element) {
+func (t *Timer) dispatchList(front *list.Element) {
+	now := time.Now()
 	for e := front; e != nil; e = e.Next() {
 		node := e.Value.(*Node)
-		go node.f()
+		select {
+		case node.C <- now:
+		default:
+		}
+		if node.period > 0 {
+			t.Lock()
+			node.expire = uint32(node.period/t.tick) + t.time
+			t.addNode(node)
+			t.Unlock()
+		}
 	}
 }
 
@@ -140,7 +163,7 @@ func (t *Timer) execute() {
 		vec.Init()
 		t.Unlock()
 		// dispatch_list don't need lock
-		dispatchList(front)
+		t.dispatchList(front)
 		return
 	}
 

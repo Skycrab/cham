@@ -2,36 +2,24 @@ package cham
 
 import (
 	"fmt"
-	"sync/atomic"
 	"testing"
 	"time"
 )
 
-var sum int32 = 0
-var N int32 = 300
-var tt *Timer
-
-func now() {
-	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
-	atomic.AddInt32(&sum, 1)
-	v := atomic.LoadInt32(&sum)
-	if v == 2*N {
-		tt.Stop()
-	}
-
-}
-
 func TestTimer(t *testing.T) {
 	timer := NewWheelTimer(time.Millisecond * 10)
-	tt = timer
-	fmt.Println(timer)
-	var i int32
-	for i = 0; i < N; i++ {
-		timer.Timeout(time.Millisecond*time.Duration(10*i), now)
-		timer.Timeout(time.Millisecond*time.Duration(10*i), now)
+	t1 := timer.NewTimer(time.Second * 10)
+	t2 := timer.NewTicker(time.Second * 2)
+	go timer.Start()
+	// var now time.Time
+	fmt.Println(time.Now())
+	for {
+		select {
+		case <-t1.C:
+			fmt.Println("t1,", time.Now())
+		case <-t2.C:
+			fmt.Println("t2", time.Now())
+		}
 	}
-	timer.Start()
-	if sum != 2*N {
-		t.Error("failed")
-	}
+
 }

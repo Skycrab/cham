@@ -24,7 +24,7 @@ type Database struct {
 	db *sql.DB
 }
 
-func (d *Database) New(db *sql.DB) *Database {
+func New(db *sql.DB) *Database {
 	return &Database{db}
 }
 
@@ -36,6 +36,7 @@ func (d *Database) Close() {
 // d.Get(&User{}, "openid", "123456")
 func (d *Database) Get(m Model, field string, value interface{}) error {
 	q, n := query(m, field, "", 0)
+	fmt.Println(q)
 	row := d.db.QueryRow(q, value)
 	v := reflect.ValueOf(m).Elem()
 	args := make([]interface{}, n)
