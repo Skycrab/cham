@@ -16,7 +16,9 @@ const (
 	autoAttr      = "auto"
 )
 
-type Model interface{}
+type Model interface {
+	TableName() string
+}
 
 type Database struct {
 	db *sql.DB
@@ -66,7 +68,7 @@ func (d *Database) Select(m Model, field string, condition interface{}, value ..
 		if err = rows.Scan(args...); err != nil {
 			return
 		}
-		ms = append(ms, v.Addr().Interface())
+		ms = append(ms, (v.Addr().Interface()).(Model))
 	}
 	err = rows.Err()
 	return
@@ -146,7 +148,7 @@ func structKeys(m Model, autoNeed bool) ([]string, int, int) {
 		f := t.Field(i)
 		if !autoNeed && f.Tag.Get(attrTag) == autoAttr {
 			if auto != -1 {
-				panic("table duplicate auto pk:" + tableName(m))
+				panic("table duplicate auto pk:" + m.TableName())
 			}
 			auto = i
 			continue
@@ -179,8 +181,16 @@ func structValues(m Model, n int, auto int) []interface{} {
 	return vv
 }
 
+// if you don't want provide TableName, you can combine DeafultModel
+type DeafultModel struct{}
+
+func (m *DeafultModel) TableName() string {
+	v := reflect.ValueOf(m)
+	return strings.ToLower(v.Elem().Type().Name())
+}
+
 // m must reflect.Ptr
-func tableName(m Model) string {
+func tableName(m interface{}) string {
 	v := reflect.ValueOf(m)
 	if method := v.MethodByName(tablenameFunc); method.IsValid() {
 		return method.Call([]reflect.Value{})[0].String()
@@ -197,7 +207,7 @@ func query(m Model, field string, condition interface{}, inlen int) (string, int
 	keys, n, _ := structKeys(m, true)
 	buf.WriteString(strings.Join(keys, ", "))
 	buf.WriteString(" FROM ")
-	buf.WriteString(tableName(m))
+	buf.WriteString(m.TableName())
 
 	if condition != nil {
 		if c, ok := condition.(string); ok && c != "" {
@@ -230,7 +240,7 @@ func query(m Model, field string, condition interface{}, inlen int) (string, int
 
 func delQuery(m Model, field string) string {
 	buf := bytes.NewBufferString("DELETE FROM ")
-	buf.WriteString(tableName(m))
+	buf.WriteString(m.TableName())
 	buf.WriteString(" WHERE ")
 	buf.WriteString(field)
 	buf.WriteString("=?")
@@ -239,7 +249,7 @@ func delQuery(m Model, field string) string {
 
 func updateQuery(m Model, field string) (string, int, int) {
 	buf := bytes.NewBufferString("UPDATE ")
-	buf.WriteString(tableName(m))
+	buf.WriteString(m.TableName())
 	buf.WriteString(" SET ")
 	keys, n, auto := structKeys(m, false)
 	for i, k := range keys {
@@ -259,7 +269,7 @@ func updateQuery(m Model, field string) (string, int, int) {
 // return {insert string, struct NumField, auto field index}
 func insertquery(m Model) (string, int, int) {
 	buf := bytes.NewBufferString("INSERT INTO ")
-	buf.WriteString(tableName(m))
+	buf.WriteString(m.TableName())
 	buf.WriteString("(")
 	keys, n, auto := structKeys(m, false)
 	buf.WriteString(strings.Join(keys, ", "))

@@ -28,6 +28,10 @@ func (u *UserWithName) TableName() string {
 	return "usertable"
 }
 
+type DefaultUser struct {
+	DeafultModel
+}
+
 func TestTableName(t *testing.T) {
 	u := &User{}
 	if tableName(u) != "users" {
@@ -38,6 +42,13 @@ func TestTableName(t *testing.T) {
 		t.Error("UserWithName tableName error")
 	}
 	fmt.Println("end")
+}
+
+func TestDefaultModel(t *testing.T) {
+	u := &DefaultUser{}
+	if u.TableName() != "deafultmodel" {
+		t.Error("TestDefaultModel error")
+	}
 }
 
 func TestQuery(t *testing.T) {
