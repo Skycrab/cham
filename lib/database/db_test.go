@@ -58,7 +58,7 @@ func TestQuery(t *testing.T) {
 
 func TestGet(t *testing.T) {
 	u := &User{}
-	d := &Database{db}
+	d := &Database{db, true}
 	fmt.Println(d.Get(u, "id", 3))
 	fmt.Println(u)
 
@@ -78,20 +78,20 @@ func TestGet(t *testing.T) {
 
 func TestDel(t *testing.T) {
 	u := &User{}
-	d := &Database{db}
+	d := &Database{db, true}
 	fmt.Println(d.Del(u, "id", 1))
 	d.DelPk(u, 2)
 }
 
 func TestInsert(t *testing.T) {
 	u := &User{Name: "kehan"}
-	d := &Database{db}
+	d := &Database{db, true}
 	fmt.Println(d.Insert(u))
 }
 
 func TestUpdate(t *testing.T) {
 	u := &User{}
-	d := &Database{db}
+	d := &Database{db, true}
 	d.GetPk(u, 3)
 	fmt.Println(u)
 	u.Name = "3333"

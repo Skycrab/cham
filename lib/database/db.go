@@ -111,10 +111,13 @@ func (d *Database) Select(m Model, field string, condition interface{}, value ..
 	t := reflect.TypeOf(m).Elem()
 	for rows.Next() {
 		v := reflect.New(t).Elem()
-		for i := 0; i < n; i++ {
-			args[i] = v.Field(i).Addr().Interface()
-		}
-		if err = rows.Scan(args...); err != nil {
+		// for i := 0; i < n; i++ {
+		// 	args[i] = v.Field(i).Addr().Interface()
+		// }
+		// if err = rows.Scan(args...); err != nil {
+		// 	return
+		// }
+		if err = scan(rows, v, args); err != nil {
 			return
 		}
 		ms = append(ms, (v.Addr().Interface()).(Model))
