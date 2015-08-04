@@ -21,22 +21,29 @@ type Model interface {
 }
 
 type Database struct {
-	db *sql.DB
+	db    *sql.DB
+	debug bool
 }
 
 func New(db *sql.DB) *Database {
-	return &Database{db}
+	return &Database{db, false}
 }
 
 func (d *Database) Close() {
 	d.db.Close()
 }
 
+func (d *Database) SetDebug(debug bool) {
+	d.debug = debug
+}
+
 //need value to reduce once reflect expense
 // d.Get(&User{}, "openid", "123456")
 func (d *Database) Get(m Model, field string, value interface{}) error {
 	q, n := query(m, field, "", 0)
-	fmt.Println(q)
+	if d.debug {
+		fmt.Println(q, " ", value)
+	}
 	row := d.db.QueryRow(q, value)
 	v := reflect.ValueOf(m).Elem()
 	args := make([]interface{}, n)
@@ -53,7 +60,9 @@ func (d *Database) GetPk(m Model, value interface{}) error {
 
 func (d *Database) Select(m Model, field string, condition interface{}, value ...interface{}) (ms []Model, err error) {
 	q, n := query(m, field, condition, len(value))
-	fmt.Println(q)
+	if d.debug {
+		fmt.Println(q, " ", value)
+	}
 	rows, err := d.db.Query(q, value...)
 	if err != nil {
 		return
@@ -93,6 +102,9 @@ func (d *Database) GetMultiPkIn(m Model, value ...interface{}) ([]Model, error) 
 
 func (d *Database) Del(m Model, field string, value interface{}) (affect int64, err error) {
 	q := delQuery(m, field)
+	if d.debug {
+		fmt.Println(q, " ", value)
+	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
 		return
@@ -110,6 +122,9 @@ func (d *Database) DelPk(m Model, value interface{}) (int64, error) {
 
 func (d *Database) Update(m Model, field string, value interface{}) (affect int64, err error) {
 	q, n, auto := updateQuery(m, field)
+	if d.debug {
+		fmt.Println(q, " ", value)
+	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
 		return
@@ -128,6 +143,9 @@ func (d *Database) Update(m Model, field string, value interface{}) (affect int6
 
 func (d *Database) Insert(m Model) (last int64, err error) {
 	q, n, auto := insertquery(m)
+	if d.debug {
+		fmt.Println(q, " ", value)
+	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
 		return
