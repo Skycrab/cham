@@ -12,9 +12,9 @@ import (
 const (
 	tablenameFunc = "TableName"
 	fieldTag      = "field"
-	primaryKey    = "id"
+	pkTag         = "pk" // primary key
 	attrTag       = "attr"
-	autoAttr      = "auto"
+	autoAttr      = "auto" //auto increamemt,e.g. id
 )
 
 const (
@@ -48,6 +48,7 @@ func (d *Database) Close() {
 
 //sql provide row and rows
 func scan(row Scanner, v reflect.Value, args []interface{}) error {
+	//need support time.Time,save time.Time index and value
 	keys := make([]int, 0)
 	values := make([]*string, 0)
 	for i := 0; i < len(args); i++ {
@@ -80,7 +81,7 @@ func scan(row Scanner, v reflect.Value, args []interface{}) error {
 func (d *Database) Get(m Model, field string, value interface{}) error {
 	q, n := query(m, field, "", 0)
 	if d.Debug {
-		fmt.Println(q, " [", value, " ]")
+		fmt.Println(q, " [", value, "]")
 	}
 	row := d.db.QueryRow(q, value)
 	v := reflect.ValueOf(m).Elem()
@@ -93,14 +94,19 @@ func (d *Database) Get(m Model, field string, value interface{}) error {
 }
 
 //primary key get
-func (d *Database) GetPk(m Model, value interface{}) error {
-	return d.Get(m, primaryKey, value)
+func (d *Database) GetPk(m Model) error {
+	keys, _, _, pkIndex := structKeys(m, true)
+	if pkIndex == -1 {
+		panic("no pk tag, table: " + m.TableName())
+	}
+	value := reflect.ValueOf(m).Elem().Field(pkIndex).Interface()
+	return d.Get(m, keys[pkIndex], value)
 }
 
 func (d *Database) Select(m Model, field string, condition interface{}, value ...interface{}) (ms []Model, err error) {
 	q, n := query(m, field, condition, len(value))
 	if d.Debug {
-		fmt.Println(q, " [", value, " ]")
+		fmt.Println(q, " ", value)
 	}
 	rows, err := d.db.Query(q, value...)
 	if err != nil {
@@ -139,13 +145,17 @@ func (d *Database) GetMultiIn(m Model, field string, value ...interface{}) ([]Mo
 }
 
 func (d *Database) GetMultiPkIn(m Model, value ...interface{}) ([]Model, error) {
-	return d.GetMultiIn(m, primaryKey, value...)
+	keys, _, _, pkIndex := structKeys(m, true)
+	if pkIndex == -1 {
+		panic("no pk tag, table: " + m.TableName())
+	}
+	return d.GetMultiIn(m, keys[pkIndex], value...)
 }
 
 func (d *Database) Del(m Model, field string, value interface{}) (affect int64, err error) {
 	q := delQuery(m, field)
 	if d.Debug {
-		fmt.Println(q, " [", value, " ]")
+		fmt.Println(q, " [", value, "]")
 	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
@@ -158,8 +168,13 @@ func (d *Database) Del(m Model, field string, value interface{}) (affect int64, 
 	return res.RowsAffected()
 }
 
-func (d *Database) DelPk(m Model, value interface{}) (int64, error) {
-	return d.Del(m, primaryKey, value)
+func (d *Database) DelPk(m Model) (int64, error) {
+	keys, _, _, pkIndex := structKeys(m, true)
+	if pkIndex == -1 {
+		panic("no pk tag, table: " + m.TableName())
+	}
+	value := reflect.ValueOf(m).Elem().Field(pkIndex).Interface()
+	return d.Del(m, keys[pkIndex], value)
 }
 
 func (d *Database) Update(m Model, field string, value interface{}) (affect int64, err error) {
@@ -173,7 +188,7 @@ func (d *Database) Update(m Model, field string, value interface{}) (affect int6
 	copy(vv, values)
 	vv[len(values)] = value
 	if d.Debug {
-		fmt.Println(q, " [", values, " ]")
+		fmt.Println(q, " ", values)
 	}
 	res, err := stmt.Exec(vv...)
 	if err != nil {
@@ -185,43 +200,83 @@ func (d *Database) Update(m Model, field string, value interface{}) (affect int6
 
 func (d *Database) Insert(m Model) (last int64, err error) {
 	q, n, auto := insertquery(m)
-	if d.Debug {
-		fmt.Println(q)
-	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
 		return
 	}
-	res, err := stmt.Exec(structValues(m, n, auto)...)
+	values := structValues(m, n, auto)
+	if d.Debug {
+		fmt.Println(q, " ", values)
+	}
+	res, err := stmt.Exec(values...)
 	if err != nil {
 		return
 	}
-	return res.LastInsertId()
+	lastId, err := res.LastInsertId()
+	_, _, autoIndex, _ := structKeys(m, true)
+	if autoIndex != -1 {
+		reflect.ValueOf(m).Elem().Field(autoIndex).SetInt(lastId)
+	}
+
+	return lastId, err
 }
 
-// return {struct keys, NumField, auto field index}
-func structKeys(m Model, autoNeed bool) ([]string, int, int) {
+//reflect is expensive,so cache model's field
+var fieldCache = make(map[string][]interface{})
+
+//delete autoIndex
+func autoDelete(keys []string, autoIndex int) []string {
+	fmt.Println(keys, autoIndex)
+	keysNew := make([]string, len(keys)-1)
+	copy(keysNew, keys[0:autoIndex])
+	copy(keysNew, keys[autoIndex+1:])
+	fmt.Println(keysNew)
+	return keysNew
+}
+
+// return {struct keys, NumField, auto field index, pk field index}
+func structKeys(m Model, autoNeed bool) ([]string, int, int, int) {
+	//cache check start
+	table := m.TableName()
+	if cache, ok := fieldCache[table]; ok {
+		keys, numField, autoIndex, pkIndex := cache[0].([]string), cache[1].(int), cache[2].(int), cache[3].(int)
+		if !autoNeed && autoIndex != -1 {
+			return autoDelete(keys, autoIndex), numField, autoIndex, pkIndex
+		}
+		return keys, numField, autoIndex, pkIndex
+	}
+	//cache check end
+
 	t := reflect.TypeOf(m).Elem()
 	n := t.NumField()
 	keys := make([]string, 0, n)
-	auto := -1
+	autoIndex, pkIndex := -1, -1
 	for i := 0; i < n; i++ {
 		f := t.Field(i)
-		if !autoNeed && f.Tag.Get(attrTag) == autoAttr {
-			if auto != -1 {
-				panic("table duplicate auto pk:" + m.TableName())
+		if f.Tag.Get(attrTag) == autoAttr {
+			if autoIndex != -1 {
+				panic("table duplicate auto :" + m.TableName())
 			}
-			auto = i
-			continue
+			autoIndex = i
 		}
 		tag := f.Tag.Get(fieldTag)
 		if tag == "" {
 			tag = strings.ToLower(f.Name)
 		}
+		pk := f.Tag.Get(pkTag)
+		if pk == "true" {
+			pkIndex = i
+		}
 		keys = append(keys, tag)
 	}
 
-	return keys, n, auto
+	//cache
+	fieldCache[table] = []interface{}{keys, n, autoIndex, pkIndex}
+	if !autoNeed && autoIndex != -1 {
+		return autoDelete(keys, autoIndex), n, autoIndex, pkIndex
+	}
+
+	return keys, n, autoIndex, pkIndex
 }
 
 // m must reflect.Ptr
@@ -272,7 +327,7 @@ func tableName(m interface{}) string {
 // condition nil -> select all, string -> condition
 func query(m Model, field string, condition interface{}, inlen int) (string, int) {
 	buf := bytes.NewBufferString("SELECT ")
-	keys, n, _ := structKeys(m, true)
+	keys, n, _, _ := structKeys(m, true)
 	buf.WriteString(strings.Join(keys, ", "))
 	buf.WriteString(" FROM ")
 	buf.WriteString(m.TableName())
@@ -319,7 +374,7 @@ func updateQuery(m Model, field string) (string, int, int) {
 	buf := bytes.NewBufferString("UPDATE ")
 	buf.WriteString(m.TableName())
 	buf.WriteString(" SET ")
-	keys, n, auto := structKeys(m, false)
+	keys, n, auto, _ := structKeys(m, false)
 	for i, k := range keys {
 		buf.WriteString(k)
 		buf.WriteString("=?")
@@ -339,7 +394,7 @@ func insertquery(m Model) (string, int, int) {
 	buf := bytes.NewBufferString("INSERT INTO ")
 	buf.WriteString(m.TableName())
 	buf.WriteString("(")
-	keys, n, auto := structKeys(m, false)
+	keys, n, auto, _ := structKeys(m, false)
 	buf.WriteString(strings.Join(keys, ", "))
 	buf.WriteString(")")
 	buf.WriteString(" VALUES(")

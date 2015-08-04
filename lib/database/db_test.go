@@ -11,7 +11,7 @@ import (
 var db *sql.DB
 
 type User struct {
-	Id   int `attr:"auto"`
+	Id   int `attr:"auto" pk:"true"`
 	Name string
 }
 
@@ -62,6 +62,11 @@ func TestGet(t *testing.T) {
 	fmt.Println(d.Get(u, "id", 3))
 	fmt.Println(u)
 
+	fmt.Println("test GetPk")
+	u.Id = 4
+	d.GetPk(u)
+	fmt.Println(u)
+
 	fmt.Println("------------------")
 	// v, e := d.GetMultiIn(u, "id", 3, 4)
 	v, e := d.GetCondition(&User{}, "where id >3 and id <? and name=?", 10, "kehan")
@@ -79,20 +84,21 @@ func TestGet(t *testing.T) {
 func TestDel(t *testing.T) {
 	u := &User{}
 	d := &Database{db, true}
-	fmt.Println(d.Del(u, "id", 1))
-	d.DelPk(u, 2)
+	u.Id = 10
+	d.DelPk(u)
 }
 
 func TestInsert(t *testing.T) {
 	u := &User{Name: "kehan"}
 	d := &Database{db, true}
 	fmt.Println(d.Insert(u))
+	fmt.Println(u)
 }
 
 func TestUpdate(t *testing.T) {
 	u := &User{}
 	d := &Database{db, true}
-	d.GetPk(u, 3)
+	d.Get(u, "id", 3)
 	fmt.Println(u)
 	u.Name = "3333"
 	fmt.Println(d.Update(u, "id", u.Id))
