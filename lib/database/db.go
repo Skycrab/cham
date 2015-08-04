@@ -95,12 +95,8 @@ func (d *Database) Get(m Model, field string, value interface{}) error {
 
 //primary key get
 func (d *Database) GetPk(m Model) error {
-	keys, _, _, pkIndex := structKeys(m, true)
-	if pkIndex == -1 {
-		panic("no pk tag, table: " + m.TableName())
-	}
-	value := reflect.ValueOf(m).Elem().Field(pkIndex).Interface()
-	return d.Get(m, keys[pkIndex], value)
+	field, value := GetPkValue(m)
+	return d.Get(m, field, value)
 }
 
 func (d *Database) Select(m Model, field string, condition interface{}, value ...interface{}) (ms []Model, err error) {
@@ -145,11 +141,8 @@ func (d *Database) GetMultiIn(m Model, field string, value ...interface{}) ([]Mo
 }
 
 func (d *Database) GetMultiPkIn(m Model, value ...interface{}) ([]Model, error) {
-	keys, _, _, pkIndex := structKeys(m, true)
-	if pkIndex == -1 {
-		panic("no pk tag, table: " + m.TableName())
-	}
-	return d.GetMultiIn(m, keys[pkIndex], value...)
+	field, _ := GetPkValue(m)
+	return d.GetMultiIn(m, field, value...)
 }
 
 func (d *Database) Del(m Model, field string, value interface{}) (affect int64, err error) {
@@ -169,12 +162,8 @@ func (d *Database) Del(m Model, field string, value interface{}) (affect int64, 
 }
 
 func (d *Database) DelPk(m Model) (int64, error) {
-	keys, _, _, pkIndex := structKeys(m, true)
-	if pkIndex == -1 {
-		panic("no pk tag, table: " + m.TableName())
-	}
-	value := reflect.ValueOf(m).Elem().Field(pkIndex).Interface()
-	return d.Del(m, keys[pkIndex], value)
+	field, value := GetPkValue(m)
+	return d.Del(m, field, value)
 }
 
 func (d *Database) Update(m Model, field string, value interface{}) (affect int64, err error) {
@@ -196,6 +185,11 @@ func (d *Database) Update(m Model, field string, value interface{}) (affect int6
 	}
 
 	return res.RowsAffected()
+}
+
+func (d *Database) UpdatePk(m Model) (int64, error) {
+	field, value := GetPkValue(m)
+	return d.Update(m, field, value)
 }
 
 func (d *Database) Insert(m Model) (last int64, err error) {
@@ -221,16 +215,23 @@ func (d *Database) Insert(m Model) (last int64, err error) {
 	return lastId, err
 }
 
+func GetPkValue(m Model) (string, interface{}) {
+	keys, _, _, pkIndex := structKeys(m, true)
+	if pkIndex == -1 {
+		panic("no pk tag, table: " + m.TableName())
+	}
+	value := reflect.ValueOf(m).Elem().Field(pkIndex).Interface()
+	return keys[pkIndex], value
+}
+
 //reflect is expensive,so cache model's field
 var fieldCache = make(map[string][]interface{})
 
 //delete autoIndex
 func autoDelete(keys []string, autoIndex int) []string {
-	fmt.Println(keys, autoIndex)
 	keysNew := make([]string, len(keys)-1)
 	copy(keysNew, keys[0:autoIndex])
 	copy(keysNew, keys[autoIndex+1:])
-	fmt.Println(keysNew)
 	return keysNew
 }
 
