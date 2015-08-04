@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 )
 
 const (
@@ -16,13 +17,25 @@ const (
 	autoAttr      = "auto"
 )
 
+const (
+	TIME_FORMATER = "2006-01-02 15:04:05"
+)
+
+var (
+	TIME_PTR_TYPE = reflect.TypeOf(&time.Time{})
+)
+
 type Model interface {
 	TableName() string
 }
 
 type Database struct {
 	db    *sql.DB
-	debug bool
+	Debug bool
+}
+
+type Scanner interface {
+	Scan(dest ...interface{}) error
 }
 
 func New(db *sql.DB) *Database {
@@ -33,24 +46,50 @@ func (d *Database) Close() {
 	d.db.Close()
 }
 
-func (d *Database) SetDebug(debug bool) {
-	d.debug = debug
+//sql provide row and rows
+func scan(row Scanner, v reflect.Value, args []interface{}) error {
+	keys := make([]int, 0)
+	values := make([]*string, 0)
+	for i := 0; i < len(args); i++ {
+		vv := v.Field(i).Addr()
+		t := vv.Type()
+		if t == TIME_PTR_TYPE {
+			var tmp string
+			args[i] = &tmp
+			keys = append(keys, i)
+			values = append(values, &tmp)
+		} else {
+			args[i] = vv.Interface()
+		}
+
+	}
+	err := row.Scan(args...)
+	if err == nil {
+		for i := 0; i < len(keys); i++ {
+			t, err := time.Parse(TIME_FORMATER, *values[i])
+			if err == nil {
+				v.Field(keys[i]).Set(reflect.ValueOf(t))
+			}
+		}
+	}
+	return err
 }
 
 //need value to reduce once reflect expense
 // d.Get(&User{}, "openid", "123456")
 func (d *Database) Get(m Model, field string, value interface{}) error {
 	q, n := query(m, field, "", 0)
-	if d.debug {
-		fmt.Println(q, " ", value)
+	if d.Debug {
+		fmt.Println(q, " [", value, " ]")
 	}
 	row := d.db.QueryRow(q, value)
 	v := reflect.ValueOf(m).Elem()
 	args := make([]interface{}, n)
-	for i := 0; i < n; i++ {
-		args[i] = v.Field(i).Addr().Interface()
-	}
-	return row.Scan(args...)
+	// for i := 0; i < n; i++ {
+	// 	args[i] = v.Field(i).Addr().Interface()
+	// }
+	// return row.Scan(args...)
+	return scan(row, v, args)
 }
 
 //primary key get
@@ -60,8 +99,8 @@ func (d *Database) GetPk(m Model, value interface{}) error {
 
 func (d *Database) Select(m Model, field string, condition interface{}, value ...interface{}) (ms []Model, err error) {
 	q, n := query(m, field, condition, len(value))
-	if d.debug {
-		fmt.Println(q, " ", value)
+	if d.Debug {
+		fmt.Println(q, " [", value, " ]")
 	}
 	rows, err := d.db.Query(q, value...)
 	if err != nil {
@@ -102,8 +141,8 @@ func (d *Database) GetMultiPkIn(m Model, value ...interface{}) ([]Model, error) 
 
 func (d *Database) Del(m Model, field string, value interface{}) (affect int64, err error) {
 	q := delQuery(m, field)
-	if d.debug {
-		fmt.Println(q, " ", value)
+	if d.Debug {
+		fmt.Println(q, " [", value, " ]")
 	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
@@ -122,9 +161,6 @@ func (d *Database) DelPk(m Model, value interface{}) (int64, error) {
 
 func (d *Database) Update(m Model, field string, value interface{}) (affect int64, err error) {
 	q, n, auto := updateQuery(m, field)
-	if d.debug {
-		fmt.Println(q, " ", value)
-	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
 		return
@@ -133,6 +169,9 @@ func (d *Database) Update(m Model, field string, value interface{}) (affect int6
 	vv := make([]interface{}, len(values)+1)
 	copy(vv, values)
 	vv[len(values)] = value
+	if d.Debug {
+		fmt.Println(q, " [", values, " ]")
+	}
 	res, err := stmt.Exec(vv...)
 	if err != nil {
 		return
@@ -143,8 +182,8 @@ func (d *Database) Update(m Model, field string, value interface{}) (affect int6
 
 func (d *Database) Insert(m Model) (last int64, err error) {
 	q, n, auto := insertquery(m)
-	if d.debug {
-		fmt.Println(q, " ", value)
+	if d.Debug {
+		fmt.Println(q)
 	}
 	stmt, err := d.db.Prepare(q)
 	if err != nil {
@@ -195,7 +234,14 @@ func structValues(m Model, n int, auto int) []interface{} {
 		if i == auto {
 			continue
 		}
-		vv = append(vv, v.Field(i).Interface())
+		vt := v.Field(i).Addr().Type()
+		var tmp interface{}
+		if vt == TIME_PTR_TYPE {
+			tmp = v.Field(i).Interface().(time.Time).Format(TIME_FORMATER)
+		} else {
+			tmp = v.Field(i).Interface()
+		}
+		vv = append(vv, tmp)
 	}
 	return vv
 }
