@@ -2,6 +2,7 @@ package lru
 
 import (
 	"container/list"
+	"sync"
 )
 
 type ExpireHandler func(Key, Value)
@@ -14,6 +15,7 @@ type entry struct {
 }
 
 type Cache struct {
+	sync.Mutex
 	MaxEntries int           // 0 -> no limit
 	OnExpire   ExpireHandler // invoke when expire delete
 	ll         *list.List
@@ -25,6 +27,8 @@ func New(maxEntries int, handler ExpireHandler) *Cache {
 }
 
 func (c *Cache) Add(key Key, value Value) (ok bool) {
+	c.Lock()
+	defer c.Unlock()
 	if e, ok := c.cache[key]; ok {
 		c.ll.MoveToFront(e)
 		e.Value.(*entry).value = value
@@ -39,6 +43,8 @@ func (c *Cache) Add(key Key, value Value) (ok bool) {
 }
 
 func (c *Cache) Get(key Key) (Value, bool) {
+	c.Lock()
+	defer c.Unlock()
 	if e, ok := c.cache[key]; ok {
 		c.ll.MoveToFront(e)
 		return e.Value.(*entry).value, true
@@ -48,6 +54,8 @@ func (c *Cache) Get(key Key) (Value, bool) {
 }
 
 func (c *Cache) Len() int {
+	c.Lock()
+	defer c.Unlock()
 	return c.ll.Len()
 }
 
