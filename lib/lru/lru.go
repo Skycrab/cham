@@ -23,7 +23,12 @@ type Cache struct {
 }
 
 func New(maxEntries int, handler ExpireHandler) *Cache {
-	return &Cache{maxEntries, handler, list.New(), make(map[Key]*list.Element)}
+	return &Cache{
+		MaxEntries: maxEntries,
+		OnExpire:   handler,
+		ll:         list.New(),
+		cache:      make(map[Key]*list.Element),
+	}
 }
 
 func (c *Cache) Add(key Key, value Value) (ok bool) {
