@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	DEFAULT_SERVICE_WORKER int = 4
+	DEFAULT_SERVICE_WORKER int = 1
 )
 
 var (

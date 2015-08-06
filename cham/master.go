@@ -46,7 +46,7 @@ func (m *Master) Unregister(s *Service) bool {
 	nss := m.nameservices[s.Name]
 	var idx int = -1
 	for i, ns := range nss {
-		if ns.Name == s.Name {
+		if ns.Addr == s.Addr {
 			idx = i
 			break
 		}
@@ -77,7 +77,9 @@ func (m *Master) GetService(query interface{}) *Service {
 }
 
 func (m *Master) UniqueService(name string) *Service {
+	m.RLock()
 	ns := m.nameservices[name]
+	m.RUnlock()
 	if len(ns) > 1 {
 		panic("unique service duplicate")
 	} else if len(ns) == 1 {
