@@ -69,6 +69,11 @@ func NewService(name string, start Start, args ...interface{}) *Service {
 	}
 
 	service.dispatchs = map[uint8]Dispatch{PTYPE_GO: start(service, args...)}
+
+	// start may failed, user can invoke service.Stop(), so check service.closed flag
+	if service.closed {
+		return nil
+	}
 	master.Register(service)
 
 	for i := 0; i < n; i++ {

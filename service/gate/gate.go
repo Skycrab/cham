@@ -50,7 +50,7 @@ type Gate struct {
 }
 
 type Backend interface {
-	Write(data []byte)
+	Write(data []byte) error
 	Close()
 }
 
@@ -103,12 +103,17 @@ func (t *TcpBackend) Close() {
 	t.conn.Close()
 }
 
-func (t *TcpBackend) Write(data []byte) {
+func (t *TcpBackend) Write(data []byte) (err error) {
 	head := make([]byte, 2)
 	binary.BigEndian.PutUint16(head, uint16(len(data)))
-	t.brw.Write(head)
-	t.brw.Write(data)
-	t.brw.Flush()
+	_, err = t.brw.Write(head)
+	if err == nil {
+		_, err = t.brw.Write(data)
+		if err == nil {
+			err = t.brw.Flush()
+		}
+	}
+	return
 }
 
 func (t *TcpBackend) readFull(buf []byte) error {
@@ -148,8 +153,8 @@ func (w *WebsocketBackend) Close() {
 	w.Websocket.Close(0, []byte(""))
 }
 
-func (w *WebsocketBackend) Write(data []byte) {
-	w.SendText(data)
+func (w *WebsocketBackend) Write(data []byte) error {
+	return w.SendText(data)
 }
 
 func newWebsocket(w http.ResponseWriter, r *http.Request, opt *Option, session uint32, gate *Gate) (*WebsocketBackend, error) {
@@ -271,13 +276,14 @@ func (g *Gate) kick(session uint32) {
 	}
 }
 
-func (g *Gate) Write(session uint32, data []byte) {
+func (g *Gate) Write(session uint32, data []byte) (err error) {
 	g.rwmutex.RLock()
 	b, ok := g.sessions[session]
 	g.rwmutex.RUnlock()
 	if ok {
-		b.Write(data)
+		err = b.Write(data)
 	}
+	return
 }
 
 func ResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch {
@@ -285,8 +291,8 @@ func ResponseStart(service *cham.Service, args ...interface{}) cham.Dispatch {
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
 		sessionid := args[0].(uint32)
 		data := args[1].([]byte)
-		gate.Write(sessionid, data)
-		return cham.NORET
+		err := gate.Write(sessionid, data)
+		return cham.Ret(err)
 	}
 }
 

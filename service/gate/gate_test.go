@@ -37,11 +37,13 @@ func clientDispatch(service *cham.Service, args ...interface{}) cham.Dispatch {
 			} else if data == "WebSocket" {
 				service.Notify("gate", cham.PTYPE_RESPONSE, sessionid, []byte("websocket reply"+strconv.Itoa(int(sessionid))))
 			}
-			// go func() {
-			// 	time.Sleep(time.Second * 2)
-			// 	fmt.Println("kick")
-			// 	service.Notify("gate", cham.PTYPE_GO, KICK, sessionid)
-			// }()
+			go func() {
+				time.Sleep(time.Second * 5)
+				fmt.Println("kick")
+				// service.Notify("gate", cham.PTYPE_GO, KICK, sessionid)
+				err := service.Call("gate", cham.PTYPE_RESPONSE, sessionid, []byte("world"))
+				fmt.Println(err)
+			}()
 		}
 		return cham.NORET
 	}
