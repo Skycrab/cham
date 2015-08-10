@@ -96,10 +96,12 @@ func UniqueService(name string, start Start, args ...interface{}) *Service {
 }
 
 func (s *Service) Start(i int) {
-	_ = string(strconv.Itoa(i))
+	seq := strconv.Itoa(i)
+	fmt.Println(s.String(), "-- ", seq, " --", "running")
 	for {
 		select {
 		case <-s.quit:
+			fmt.Println(s.String(), "-- ", seq, " --", "stop")
 			return
 		default:
 			msg := s.queue.Pop()
@@ -162,6 +164,10 @@ func (s *Service) Call(query interface{}, ptype uint8, args ...interface{}) []in
 // no reply
 func (s *Service) Notify(query interface{}, ptype uint8, args ...interface{}) {
 	s.send(query, ptype, 0, args...)
+}
+
+func (s *Service) NotifySelf(ptype uint8, args ...interface{}) {
+	s.send(s, ptype, 0, args...)
 }
 
 // no wait response

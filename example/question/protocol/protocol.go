@@ -17,16 +17,21 @@ type Request struct {
 
 //response head
 type Response struct {
-	Code   int         `json:"code"` // 0 correct
-	Result interface{} `json:"result"`
+	Code    int         `json:"code"` // 0 correct
+	Service string      `json:"service"`
+	Result  interface{} `json:"result"`
 }
 
 //
 //
 //concrete protocol
 
-type User struct {
+type Login struct {
 	Openid string `json:"openid"`
+}
+
+//to common, websocket and tcp use the same
+type HeartBeat struct {
 }
 
 func Decode(data []byte) (string, interface{}) {
@@ -49,8 +54,13 @@ func Decode(data []byte) (string, interface{}) {
 
 }
 
+//result can ptr or value
 func Encode(code int, result interface{}) []byte {
-	response := Response{code, result}
+	t := reflect.TypeOf(result)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	response := Response{code, strings.ToLower(t.Name()), result}
 	b, e := json.Marshal(response)
 	if e != nil {
 		log.Errorln("Response Encode error, ", e.Error())
@@ -66,7 +76,7 @@ func register(p interface{}) {
 }
 
 func init() {
-	protos := []interface{}{&User{}}
+	protos := []interface{}{&Login{}}
 	for _, p := range protos {
 		register(p)
 	}

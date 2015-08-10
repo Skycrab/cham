@@ -3,7 +3,7 @@ package room
 import (
 	"cham/cham"
 	"cham/service/log"
-	"question/model/user"
+	"question/model"
 )
 
 type Room struct {

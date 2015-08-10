@@ -3,9 +3,16 @@ package user
 import (
 	"cham/cham"
 	"cham/service/log"
+	// "fmt"
 	"question/db"
 	"question/model"
+	"question/protocol"
 	"time"
+)
+
+const (
+	CHANGE_SESSION uint8 = iota
+	DELETE_USER
 )
 
 //user
@@ -21,29 +28,55 @@ func newUser(service *cham.Service, u *model.UserModel, session uint32) (*User, 
 	if err != nil {
 		return nil, err
 	}
-	user := &User{m.(*UserModel), service, session, time.Now()}
+	user := &User{m.(*model.UserModel), service, session, time.Now()}
 	go user.Run()
 	return user, nil
 }
 
 func (user *User) Save() {
-	db.DbCache.UpdateModel(m.UserModel)
+	db.DbCache.UpdateModel(user.UserModel)
 }
 
 func (user *User) Response(data []byte) error {
 	result := user.service.Call("gate", cham.PTYPE_RESPONSE, user.session, data)
-	err := result[0].(error)
-	return err
+	err := result[0]
+	if err != nil {
+		return err.(error)
+	}
+	return nil
+}
+
+func (user *User) Kill() {
+	user.service.Call("broker", cham.PTYPE_GO, DELETE_USER, user.Openid)
+	user.service.Stop()
+	user.Save()
 }
 
 func (user *User) Run() {
 	t := cham.DTimer.NewTicker(time.Minute * 5)
+	t2 := cham.DTimer.NewTicker(time.Second * 5)
+	heart := protocol.HeartBeat{}
+	lost := 0
 	for {
 		select {
 		case t := <-t.C:
-			log.Infoln("user every 5 Minute check start, openid:", user.Openid)
+			log.Infoln("every 5 Minute check start, openid:", user.Openid, " time:", t)
 			user.Save()
-			log.Infoln("user every 5 Minute check end, openid:", user.Openid)
+		case t2 := <-t2.C:
+			log.Infoln("every 5 Second heart beat, time:", t2)
+			err := user.Response(protocol.Encode(0, heart))
+			if err != nil {
+				lost++
+				log.Infoln("user heart beat lost,openid:", user.Openid)
+			} else {
+				lost = 0
+			}
+			// fmt.Println("---------", lost)
+			if lost >= 5 {
+				log.Infoln("heart beat lost more 5 time, close user service, openid:", user.Openid)
+				user.Kill()
+				return
+			}
 		}
 	}
 }
@@ -57,6 +90,12 @@ func Start(service *cham.Service, args ...interface{}) cham.Dispatch {
 		service.Stop()
 	}
 	return func(session int32, source cham.Address, ptype uint8, args ...interface{}) []interface{} {
+		cmd := args[0].(uint8)
+		switch cmd {
+		case CHANGE_SESSION:
+			user.session = args[1].(uint32)
+		}
+
 		return cham.NORET
 	}
 }
